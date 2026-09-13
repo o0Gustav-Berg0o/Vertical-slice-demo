@@ -17,10 +17,15 @@ const state = {
   activeBackendId: BACKENDS[0].id,
   products: [],
   lineItemCount: 0,
+  tokens: {}, // backendId -> { token, expiresAtUtc, username }
 };
 
 function activeBackend() {
   return BACKENDS.find((b) => b.id === state.activeBackendId);
+}
+
+function activeToken() {
+  return state.tokens[state.activeBackendId] || null;
 }
 
 function apiUrl(path) {
@@ -39,11 +44,14 @@ function log(message, type = "info") {
   }
 }
 
-async function apiFetch(path, options) {
-  const response = await fetch(apiUrl(path), {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+async function apiFetch(path, options = {}) {
+  const token = activeToken();
+  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+  if (token) {
+    headers.Authorization = `Bearer ${token.token}`;
+  }
+
+  const response = await fetch(apiUrl(path), { ...options, headers });
 
   let body = null;
   const text = await response.text();
@@ -56,8 +64,14 @@ async function apiFetch(path, options) {
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      delete state.tokens[state.activeBackendId];
+      renderAuthPanel();
+    }
+
     const detail =
-      (body && (body.detail || body.title)) || `HTTP ${response.status}`;
+      (body && (body.detail || body.title)) ||
+      (response.status === 401 ? "Not authenticated" : `HTTP ${response.status}`);
     const errors = body && body.errors
       ? Object.entries(body.errors)
           .map(([field, msgs]) => `${field}: ${msgs.join(", ")}`)
@@ -87,7 +101,10 @@ function renderBackendSwitcher() {
     card.addEventListener("click", () => {
       state.activeBackendId = backend.id;
       renderBackendSwitcher();
-      loadProducts();
+      renderAuthPanel();
+      if (activeToken()) {
+        loadProducts();
+      }
     });
     container.appendChild(card);
   }
@@ -101,12 +118,29 @@ async function pingBackend(backend) {
   const dot = document.getElementById(`status-${backend.id}`);
   if (!dot) return;
   try {
-    const response = await fetch(`${backend.url}/api/products`);
-    dot.classList.toggle("online", response.ok);
-    dot.classList.toggle("offline", !response.ok);
+    // Any response (even 401) means the server is reachable.
+    await fetch(`${backend.url}/api/products`);
+    dot.classList.add("online");
+    dot.classList.remove("offline");
   } catch {
     dot.classList.remove("online");
     dot.classList.add("offline");
+  }
+}
+
+function renderAuthPanel() {
+  const status = document.getElementById("auth-status");
+  const protectedArea = document.getElementById("protected-area");
+  const token = activeToken();
+
+  if (token) {
+    status.textContent = `signed in as ${token.username} on ${activeBackend().name} (expires ${new Date(token.expiresAtUtc).toLocaleTimeString()})`;
+    status.classList.add("online");
+    protectedArea.hidden = false;
+  } else {
+    status.textContent = `not signed in to ${activeBackend().name}`;
+    status.classList.remove("online");
+    protectedArea.hidden = true;
   }
 }
 
@@ -201,6 +235,31 @@ function collectLineItems() {
 }
 
 function setupForms() {
+  document.getElementById("login-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const request = {
+      username: document.getElementById("login-username").value,
+      password: document.getElementById("login-password").value,
+    };
+
+    try {
+      const result = await apiFetch("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify(request),
+      });
+      state.tokens[state.activeBackendId] = {
+        token: result.token,
+        expiresAtUtc: result.expiresAtUtc,
+        username: result.username,
+      };
+      renderAuthPanel();
+      log(`Signed in as ${result.username} on ${activeBackend().name}`, "success");
+      await loadProducts();
+    } catch (err) {
+      log(`Login failed: ${err.message}`, "error");
+    }
+  });
+
   document.getElementById("product-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const request = {
@@ -275,6 +334,6 @@ function setupForms() {
 }
 
 renderBackendSwitcher();
+renderAuthPanel();
 setupForms();
 addLineItem();
-loadProducts();

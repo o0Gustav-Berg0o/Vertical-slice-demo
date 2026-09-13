@@ -14,6 +14,7 @@ public class GetOrderEndpoint : IEndpoint
             })
             .WithName("GetOrder")
             .WithTags("Orders")
+            .RequireAuthorization()
             .Produces<GetOrderResponse>()
             .Produces(StatusCodes.Status404NotFound);
     }

@@ -1,11 +1,13 @@
 using LayeredArchitectureDemo.Models.Dtos;
 using LayeredArchitectureDemo.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LayeredArchitectureDemo.Controllers;
 
 [ApiController]
 [Route("api/orders")]
+[Authorize]
 public class OrdersController(IOrderService orderService) : ControllerBase
 {
     [HttpGet("{id:int}")]

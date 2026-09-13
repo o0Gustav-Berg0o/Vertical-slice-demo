@@ -1,11 +1,13 @@
 using LayeredArchitectureDemo.Models.Dtos;
 using LayeredArchitectureDemo.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LayeredArchitectureDemo.Controllers;
 
 [ApiController]
 [Route("api/products")]
+[Authorize]
 public class ProductsController(IProductService productService) : ControllerBase
 {
     [HttpGet]

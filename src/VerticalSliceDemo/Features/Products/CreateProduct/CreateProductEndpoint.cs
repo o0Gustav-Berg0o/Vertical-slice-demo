@@ -14,6 +14,7 @@ public class CreateProductEndpoint : IEndpoint
             })
             .WithName("CreateProduct")
             .WithTags("Products")
+            .RequireAuthorization()
             .Produces<CreateProductResponse>(StatusCodes.Status201Created)
             .ProducesValidationProblem();
     }

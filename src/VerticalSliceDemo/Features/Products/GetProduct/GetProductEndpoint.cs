@@ -14,6 +14,7 @@ public class GetProductEndpoint : IEndpoint
             })
             .WithName("GetProduct")
             .WithTags("Products")
+            .RequireAuthorization()
             .Produces<GetProductResponse>()
             .Produces(StatusCodes.Status404NotFound);
     }

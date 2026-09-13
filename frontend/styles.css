@@ -108,6 +108,35 @@ header p {
   background: var(--danger);
 }
 
+.auth-panel {
+  margin-bottom: 16px;
+}
+
+.auth-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+}
+
+.auth-panel #auth-status.online {
+  color: var(--success);
+}
+
+.auth-panel form {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: end;
+}
+
+.auth-panel form label {
+  flex: 1 1 160px;
+}
+
+.auth-panel form button {
+  height: 37px;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));

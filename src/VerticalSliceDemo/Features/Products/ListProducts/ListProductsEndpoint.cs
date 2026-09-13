@@ -14,6 +14,7 @@ public class ListProductsEndpoint : IEndpoint
             })
             .WithName("ListProducts")
             .WithTags("Products")
+            .RequireAuthorization()
             .Produces<IReadOnlyList<ListProductsResponse>>();
     }
 }

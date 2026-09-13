@@ -15,7 +15,21 @@
 
     <div class="backend-switcher" id="backend-switcher"></div>
 
-    <div class="grid">
+    <section class="panel auth-panel" id="auth-panel">
+      <h2>Sign in <span class="muted" id="auth-status">not signed in</span></h2>
+      <form id="login-form">
+        <label>Username
+          <input type="text" id="login-username" required value="admin" />
+        </label>
+        <label>Password
+          <input type="password" id="login-password" required value="Passw0rd!" />
+        </label>
+        <button type="submit">Sign in</button>
+      </form>
+      <p class="muted">Demo credentials are pre-filled. Each backend issues its own token &mdash; switching backends requires signing in again.</p>
+    </section>
+
+    <div class="grid" id="protected-area" hidden>
       <section class="panel">
         <h2>Create product</h2>
         <form id="product-form">

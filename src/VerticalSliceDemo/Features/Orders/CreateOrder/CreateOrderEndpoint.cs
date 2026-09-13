@@ -14,6 +14,7 @@ public class CreateOrderEndpoint : IEndpoint
             })
             .WithName("CreateOrder")
             .WithTags("Orders")
+            .RequireAuthorization()
             .Produces<CreateOrderResponse>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
             .Produces(StatusCodes.Status404NotFound);

@@ -14,6 +14,7 @@ one — so you can compare the styles side by side without the API surface chang
 
 Both expose the same routes (`GET/POST /api/products`, `GET /api/products/{id}`,
 `POST/GET /api/orders[/{id}]`) with the same JSON shapes, backed by their own SQLite database.
+All of those routes require a **JWT bearer token** — see [Authentication](#authentication) below.
 
 ## 1. Vertical Slice API (`src/VerticalSliceDemo`)
 
@@ -30,13 +31,17 @@ src/VerticalSliceDemo/
 │   ├── Orders/
 │   │   ├── CreateOrder/     (Command, Handler, Validator, Response, Endpoint)
 │   │   └── GetOrder/        (Query, Handler, Response, Endpoint)
-│   └── Shared/
-│       ├── Abstractions/    (IEndpoint, ValidationBehavior, NotFoundException)
-│       └── Extensions/      (DI + endpoint-mapping helpers)
+│   ├── Shared/
+│   │   ├── Abstractions/    (IEndpoint, ValidationBehavior, NotFoundException, UnauthorizedException)
+│   │   ├── Extensions/      (DI + endpoint-mapping helpers)
+│   │   └── Security/        (PasswordHasher, JwtOptions, JwtTokenGenerator)
+│   └── Auth/
+│       └── Login/           (Command, Handler, Validator, Response, Endpoint — AllowAnonymous)
 ├── Data/
 │   ├── AppDbContext.cs
 │   ├── AppDbContextFactory.cs   (EF Core design-time factory)
-│   ├── Entities/
+│   ├── DbSeeder.cs              (seeds one demo user on startup)
+│   ├── Entities/                (Product, Order, OrderItem, User)
 │   └── Migrations/
 ├── Program.cs
 └── appsettings.json
@@ -61,18 +66,19 @@ The same domain, organized the traditional way: by technical layer instead of by
 
 ```
 src/LayeredArchitectureDemo/
-├── Controllers/       (ProductsController, OrdersController — HTTP concerns only)
-├── Services/          (IProductService/ProductService, IOrderService/OrderService — business logic)
-├── Repositories/      (IProductRepository/ProductRepository, IOrderRepository/OrderRepository — data access)
+├── Controllers/       (ProductsController, OrdersController [Authorize]; AuthController [AllowAnonymous])
+├── Services/          (Product/Order/Auth services — business logic)
+├── Repositories/      (Product/Order/User repositories — data access)
 ├── Models/
-│   ├── Dtos/           (request/response records)
-│   └── Entities/       (EF Core entities)
+│   ├── Dtos/           (request/response records, incl. Login)
+│   └── Entities/       (EF Core entities, incl. User)
 ├── Validators/         (FluentValidation validators for request DTOs)
 ├── Data/
 │   ├── AppDbContext.cs
 │   ├── AppDbContextFactory.cs
+│   ├── DbSeeder.cs     (seeds one demo user on startup)
 │   └── Migrations/
-├── Common/             (NotFoundException)
+├── Common/             (NotFoundException, UnauthorizedException, PasswordHasher, JwtOptions, JwtTokenGenerator)
 ├── Program.cs
 └── appsettings.json
 ```
@@ -89,12 +95,38 @@ cd src/LayeredArchitectureDemo
 dotnet run   # http://localhost:5136
 ```
 
+## Authentication
+
+Both APIs require a JWT bearer token on every Products/Orders route. Each seeds one demo
+user on startup and exposes an anonymous login endpoint that issues a token:
+
+```bash
+curl -X POST http://localhost:5010/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"Passw0rd!"}'
+# => { "token": "eyJ...", "expiresAtUtc": "...", "username": "admin" }
+
+curl http://localhost:5010/api/products -H "Authorization: Bearer <token>"
+```
+
+Notes:
+- Passwords are hashed with PBKDF2 (100,000 iterations, per-user salt) — see `PasswordHasher`
+  in each API's `Common`/`Features/Shared/Security` folder.
+- Tokens are HS256-signed with a per-API secret configured under `Jwt:SigningKey` in each
+  `appsettings.json`. **These are demo secrets committed to the repo** — replace them (e.g.
+  with user secrets or an environment variable) before using this outside a local demo.
+- A token issued by one API is not valid on the other — they have independent signing keys
+  and issuers, even though the DTO shapes match.
+- Requests without a valid token get `401 Unauthorized`; a failed login also returns `401`.
+
 ## 3. Frontend (`frontend/`)
 
-A dependency-free static page (plain HTML/CSS/JS, no build step) that can create/list
-products and create/look up orders against **either** backend — pick one from the cards at
-the top of the page. Both APIs enable CORS (`AllowAnyOrigin`) for local development so the
-page can call them directly from a different origin.
+A dependency-free static page (plain HTML/CSS/JS, no build step) that can log in, then
+create/list products and create/look up orders against **either** backend — pick one from
+the cards at the top of the page. The demo credentials are pre-filled in the login form.
+Signing in to one backend does not carry over to the other, since each issues its own token.
+Both APIs enable CORS (`AllowAnyOrigin`) for local development so the page can call them
+directly from a different origin.
 
 ```bash
 cd frontend
@@ -108,6 +140,7 @@ Then open http://localhost:8080, with both APIs running (see above) in the backg
 - **.NET 10**
 - **EF Core (SQLite)** for persistence, **EF Core InMemory** for tests
 - **FluentValidation** for request validation
+- **JWT bearer authentication** (`Microsoft.AspNetCore.Authentication.JwtBearer`)
 - **xUnit** for unit tests
 
 ## Testing
@@ -116,5 +149,5 @@ Then open http://localhost:8080, with both APIs running (see above) in the backg
 dotnet test
 ```
 
-Runs unit tests for both APIs: handler/validator tests for the Vertical Slice API, and
-service tests (against an in-memory database) for the Layered API.
+Runs unit tests for both APIs: handler/validator/login tests for the Vertical Slice API, and
+service tests, including auth, (against an in-memory database) for the Layered API.
