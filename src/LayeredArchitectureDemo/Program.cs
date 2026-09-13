@@ -1,17 +1,23 @@
 using FluentValidation;
+using LayeredArchitectureDemo.Common;
+using LayeredArchitectureDemo.Data;
+using LayeredArchitectureDemo.Repositories;
+using LayeredArchitectureDemo.Services;
 using Microsoft.EntityFrameworkCore;
-using VerticalSliceDemo.Data;
-using VerticalSliceDemo.Features.Shared.Abstractions;
-using VerticalSliceDemo.Features.Shared.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")
-                       ?? "Data Source=verticalslicedemo.db"));
+                       ?? "Data Source=layeredarchitecturedemo.db"));
 
-builder.Services.AddFeatures(typeof(Program).Assembly);
+builder.Services.AddScoped<IProductRepository, ProductRepository>();
+builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+builder.Services.AddScoped<IProductService, ProductService>();
+builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 
+builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
 builder.Services.AddCors(options =>
@@ -64,8 +70,7 @@ app.UseExceptionHandler(errorApp =>
 
 app.UseCors("Frontend");
 app.UseHttpsRedirection();
-
-app.MapFeatureEndpoints(typeof(Program).Assembly);
+app.MapControllers();
 
 app.Run();
 

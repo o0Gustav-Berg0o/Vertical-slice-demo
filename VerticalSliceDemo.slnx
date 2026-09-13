@@ -1,8 +1,10 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/LayeredArchitectureDemo/LayeredArchitectureDemo.csproj" />
     <Project Path="src/VerticalSliceDemo/VerticalSliceDemo.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/LayeredArchitectureDemo.Tests/LayeredArchitectureDemo.Tests.csproj" />
     <Project Path="tests/VerticalSliceDemo.Tests/VerticalSliceDemo.Tests.csproj" />
   </Folder>
 </Solution>

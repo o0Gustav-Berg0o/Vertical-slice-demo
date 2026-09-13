@@ -1,10 +1,24 @@
-# Vertical Slice Demo
+# Architecture Comparison Demo
 
-A .NET 10 Web API demonstrating **Vertical Slice Architecture (VSA)**: each feature owns its
-request/response, handler, and validation in one folder, instead of being spread across
-layered Controllers/Services/Repositories.
+Two .NET 10 Web APIs implementing the **identical domain and HTTP contract** (Products,
+Orders) with two different architectural styles, plus one frontend that can drive either
+one — so you can compare the styles side by side without the API surface changing.
 
-## Structure
+| | Vertical Slice API | Layered API |
+|---|---|---|
+| Path | `src/VerticalSliceDemo` | `src/LayeredArchitectureDemo` |
+| Organized by | Feature | Technical layer |
+| Request dispatch | MediatR command/query | ASP.NET controllers |
+| Validation | FluentValidation as a MediatR pipeline behavior | FluentValidation invoked explicitly in the service layer |
+| Default port | 5010 | 5136 |
+
+Both expose the same routes (`GET/POST /api/products`, `GET /api/products/{id}`,
+`POST/GET /api/orders[/{id}]`) with the same JSON shapes, backed by their own SQLite database.
+
+## 1. Vertical Slice API (`src/VerticalSliceDemo`)
+
+Each feature owns its request/response, handler, and validation in one folder, instead of
+being spread across layered Controllers/Services/Repositories.
 
 ```
 src/VerticalSliceDemo/
@@ -26,45 +40,75 @@ src/VerticalSliceDemo/
 │   └── Migrations/
 ├── Program.cs
 └── appsettings.json
-
-tests/VerticalSliceDemo.Tests/
-├── Features/Products/   (handler + validator tests)
-├── Features/Orders/     (handler + validator tests)
-└── Common/              (in-memory DbContext test helper)
 ```
 
-## Stack
-
-- **.NET 10** minimal APIs
-- **MediatR** for in-process command/query dispatch
-- **FluentValidation**, wired in as a MediatR pipeline behavior so every command/query is
-  validated before it reaches its handler
-- **EF Core (SQLite)** for persistence, **EF Core InMemory** for tests
-- **xUnit** for unit tests
-
-## Running
+- **MediatR** dispatches each command/query to its single handler.
+- **FluentValidation** validators are picked up by a `ValidationBehavior` in the MediatR
+  pipeline, so every request is validated before it reaches its handler.
+- Adding a feature: create a folder under `Features/<Area>/<FeatureName>/` with a
+  `Command`/`Query`, `Response`, `Handler`, optional `Validator`, and an `Endpoint`
+  implementing `IEndpoint`. `AddFeatures`/`MapFeatureEndpoints` scan the assembly and wire
+  it up automatically — nothing else needs registering.
 
 ```bash
 cd src/VerticalSliceDemo
-dotnet run
+dotnet run   # http://localhost:5010
 ```
 
-The database is created automatically on startup in the Development environment. The OpenAPI
-document is served at `/openapi/v1.json` in Development.
+## 2. Layered API (`src/LayeredArchitectureDemo`)
 
-### Example requests
+The same domain, organized the traditional way: by technical layer instead of by feature.
+
+```
+src/LayeredArchitectureDemo/
+├── Controllers/       (ProductsController, OrdersController — HTTP concerns only)
+├── Services/          (IProductService/ProductService, IOrderService/OrderService — business logic)
+├── Repositories/      (IProductRepository/ProductRepository, IOrderRepository/OrderRepository — data access)
+├── Models/
+│   ├── Dtos/           (request/response records)
+│   └── Entities/       (EF Core entities)
+├── Validators/         (FluentValidation validators for request DTOs)
+├── Data/
+│   ├── AppDbContext.cs
+│   ├── AppDbContextFactory.cs
+│   └── Migrations/
+├── Common/             (NotFoundException)
+├── Program.cs
+└── appsettings.json
+```
+
+- Controllers only translate HTTP <-> DTOs and call a service.
+- Services hold business logic: they call `IValidator<T>.ValidateAndThrowAsync` themselves,
+  then coordinate one or more repositories.
+- Repositories are the only place that talks to `AppDbContext`.
+- Adding a feature means touching every layer: a DTO, a validator, a repository method (if
+  needed), a service method, and a controller action — the trade-off VSA avoids.
 
 ```bash
-curl -X POST http://localhost:5000/api/products \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Widget","description":"A useful widget","price":9.99,"stockQuantity":100}'
-
-curl http://localhost:5000/api/products
-
-curl -X POST http://localhost:5000/api/orders \
-  -H "Content-Type: application/json" \
-  -d '{"customerName":"Ada Lovelace","items":[{"productId":1,"quantity":2}]}'
+cd src/LayeredArchitectureDemo
+dotnet run   # http://localhost:5136
 ```
+
+## 3. Frontend (`frontend/`)
+
+A dependency-free static page (plain HTML/CSS/JS, no build step) that can create/list
+products and create/look up orders against **either** backend — pick one from the cards at
+the top of the page. Both APIs enable CORS (`AllowAnyOrigin`) for local development so the
+page can call them directly from a different origin.
+
+```bash
+cd frontend
+python3 -m http.server 8080   # or any static file server
+```
+
+Then open http://localhost:8080, with both APIs running (see above) in the background.
+
+## Stack (both APIs)
+
+- **.NET 10**
+- **EF Core (SQLite)** for persistence, **EF Core InMemory** for tests
+- **FluentValidation** for request validation
+- **xUnit** for unit tests
 
 ## Testing
 
@@ -72,12 +116,5 @@ curl -X POST http://localhost:5000/api/orders \
 dotnet test
 ```
 
-## Adding a new feature slice
-
-1. Create a folder under `Features/<Area>/<FeatureName>/`.
-2. Add a `Command`/`Query` (implements `IRequest<TResponse>`), a `Response` record, a
-   `Handler` (implements `IRequestHandler<,>`), and optionally a `Validator`
-   (`AbstractValidator<T>`).
-3. Add an `Endpoint` class implementing `IEndpoint` and map the route in `MapEndpoint`.
-4. It's picked up automatically — `AddFeatures` and `MapFeatureEndpoints` scan the assembly
-   for handlers, validators, and endpoints, so nothing else needs to be registered.
+Runs unit tests for both APIs: handler/validator tests for the Vertical Slice API, and
+service tests (against an in-memory database) for the Layered API.

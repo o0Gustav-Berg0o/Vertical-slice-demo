@@ -1,0 +1,6 @@
+@LayeredArchitectureDemo_HostAddress = http://localhost:5136
+
+GET {{LayeredArchitectureDemo_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
