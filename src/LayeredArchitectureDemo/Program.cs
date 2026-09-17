@@ -98,8 +98,10 @@ app.UseExceptionHandler(errorApp =>
     });
 });
 
+// No HTTPS redirection: an http->https redirect to a different port is a cross-origin
+// redirect, and browsers strip the Authorization header on those, breaking bearer auth
+// for the static frontend. This API is plain HTTP by design for local development.
 app.UseCors("Frontend");
-app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
