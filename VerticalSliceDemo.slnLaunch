@@ -1,0 +1,19 @@
+[
+  {
+    "Name": "All (both APIs + frontend)",
+    "Projects": [
+      {
+        "Path": "src\\VerticalSliceDemo\\VerticalSliceDemo.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "src\\LayeredArchitectureDemo\\LayeredArchitectureDemo.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "frontend\\Frontend.csproj",
+        "Action": "StartWithoutDebugging"
+      }
+    ]
+  }
+]

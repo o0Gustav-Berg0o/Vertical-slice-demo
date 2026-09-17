@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architecture Comparison Demo</title>
+  <link rel="stylesheet" href="shared/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Architecture Comparison Demo</h1>
+      <p>Pick a backend to open its dedicated UI.</p>
+    </header>
+
+    <div class="backend-info">
+      <h3><a href="vsa/">Vertical Slice API</a></h3>
+      <p>Feature folders: Command/Handler/Validator per slice (MediatR)</p>
+      <div class="url">http://localhost:5010</div>
+    </div>
+
+    <div class="backend-info">
+      <h3><a href="layered/">Layered API</a></h3>
+      <p>Controller → Service → Repository → Data</p>
+      <div class="url">http://localhost:5136</div>
+    </div>
+  </div>
+</body>
+</html>

@@ -7,4 +7,5 @@
     <Project Path="tests/LayeredArchitectureDemo.Tests/LayeredArchitectureDemo.Tests.csproj" />
     <Project Path="tests/VerticalSliceDemo.Tests/VerticalSliceDemo.Tests.csproj" />
   </Folder>
+  <Project Path="frontend/Frontend.csproj" />
 </Solution>

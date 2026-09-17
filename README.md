@@ -123,13 +123,16 @@ Notes:
 
 Two dependency-free static pages (plain HTML/CSS/JS, no build step), one per backend, each
 hard-wired to its own API so there's no switcher and no ambiguity about which backend a
-click hits:
+click hits. They're served by a minimal ASP.NET Core static-file host, `Frontend.csproj`,
+which is itself a project in the solution:
 
 ```
 frontend/
-├── shared/    (styles.css + app.js — the UI logic, parameterized by window.BACKEND)
-├── vsa/       (index.html for the Vertical Slice API, http://localhost:5010)
-└── layered/   (index.html for the Layered API, http://localhost:5136)
+├── Frontend.csproj   (static-file host — no build step for the HTML/CSS/JS themselves)
+├── index.html        (landing page linking to vsa/ and layered/)
+├── shared/            (styles.css + app.js — the UI logic, parameterized by window.BACKEND)
+├── vsa/               (index.html for the Vertical Slice API, http://localhost:5010)
+└── layered/           (index.html for the Layered API, http://localhost:5136)
 ```
 
 Each page can log in, then create/list products and create/look up orders against its one
@@ -140,11 +143,29 @@ directly from a different origin.
 
 ```bash
 cd frontend
-python3 -m http.server 8080   # or any static file server
+dotnet run   # http://localhost:8080
 ```
 
-Then open http://localhost:8080/vsa/ or http://localhost:8080/layered/, with the
-corresponding API running (see above) in the background.
+Then open http://localhost:8080/vsa/ or http://localhost:8080/layered/ (or
+http://localhost:8080/ for a landing page with links to both), with the corresponding
+API running (see above) in the background.
+
+## Running all three together
+
+All three projects (`VerticalSliceDemo`, `LayeredArchitectureDemo`, `Frontend`) are in
+`VerticalSliceDemo.slnx`, and a shared multi-startup launch profile,
+`VerticalSliceDemo.slnLaunch`, is checked in. In Visual Studio, open the solution, pick
+**All (both APIs + frontend)** from the startup-project dropdown in the toolbar, and press
+**F5** — both APIs start under the debugger and the frontend host starts alongside them
+(opening your browser at http://localhost:8080).
+
+From the CLI, start each in its own terminal:
+
+```bash
+cd src/VerticalSliceDemo && dotnet run        # http://localhost:5010
+cd src/LayeredArchitectureDemo && dotnet run  # http://localhost:5136
+cd frontend && dotnet run                     # http://localhost:8080
+```
 
 ## Stack (both APIs)
 
