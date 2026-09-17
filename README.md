@@ -60,6 +60,10 @@ cd src/VerticalSliceDemo
 dotnet run   # http://localhost:5010
 ```
 
+Want hands-on practice with the pattern? [OVNING-TodoApp-VSA.md](OVNING-TodoApp-VSA.md)
+is a step-by-step exercise (in Swedish) that walks through adding a whole new
+feature — a Todo list — the same way Products and Orders are built here.
+
 ## 2. Layered API (`src/LayeredArchitectureDemo`)
 
 The same domain, organized the traditional way: by technical layer instead of by feature.
