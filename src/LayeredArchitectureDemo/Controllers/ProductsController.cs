@@ -1,4 +1,5 @@
 using LayeredArchitectureDemo.Models.Dtos;
+using LayeredArchitectureDemo.Models.Entities;
 using LayeredArchitectureDemo.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -25,6 +26,7 @@ public class ProductsController(IProductService productService) : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<ProductResponse>> Create(
         CreateProductRequest request,
         CancellationToken cancellationToken)

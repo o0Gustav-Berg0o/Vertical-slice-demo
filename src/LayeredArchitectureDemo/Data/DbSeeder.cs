@@ -13,8 +13,12 @@ public static class DbSeeder
             return;
         }
 
-        var (hash, salt) = PasswordHasher.Hash("Passw0rd!");
-        db.Users.Add(new User { Username = "admin", PasswordHash = hash, PasswordSalt = salt });
+        var (adminHash, adminSalt) = PasswordHasher.Hash("Passw0rd!");
+        db.Users.Add(new User { Username = "admin", PasswordHash = adminHash, PasswordSalt = adminSalt, Role = Roles.Admin });
+
+        var (userHash, userSalt) = PasswordHasher.Hash("Passw0rd!");
+        db.Users.Add(new User { Username = "user", PasswordHash = userHash, PasswordSalt = userSalt, Role = Roles.User });
+
         await db.SaveChangesAsync(cancellationToken);
     }
 }

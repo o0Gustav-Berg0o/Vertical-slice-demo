@@ -26,13 +26,14 @@ public class AuthServiceTests
     {
         using var db = TestDbContextFactory.Create();
         var (hash, salt) = PasswordHasher.Hash("Passw0rd!");
-        db.Users.Add(new User { Username = "admin", PasswordHash = hash, PasswordSalt = salt });
+        db.Users.Add(new User { Username = "admin", PasswordHash = hash, PasswordSalt = salt, Role = Roles.Admin });
         await db.SaveChangesAsync();
 
         var service = new AuthService(new UserRepository(db), CreateTokenGenerator(), new LoginRequestValidator());
         var result = await service.LoginAsync(new LoginRequest("admin", "Passw0rd!"), CancellationToken.None);
 
         Assert.Equal("admin", result.Username);
+        Assert.Equal(Roles.Admin, result.Role);
         Assert.False(string.IsNullOrWhiteSpace(result.Token));
     }
 

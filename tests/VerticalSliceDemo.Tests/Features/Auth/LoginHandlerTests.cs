@@ -23,13 +23,14 @@ public class LoginHandlerTests
     {
         using var db = TestDbContextFactory.Create();
         var (hash, salt) = PasswordHasher.Hash("Passw0rd!");
-        db.Users.Add(new User { Username = "admin", PasswordHash = hash, PasswordSalt = salt });
+        db.Users.Add(new User { Username = "admin", PasswordHash = hash, PasswordSalt = salt, Role = Roles.Admin });
         await db.SaveChangesAsync();
 
         var handler = new LoginHandler(db, CreateTokenGenerator());
         var result = await handler.Handle(new LoginCommand("admin", "Passw0rd!"), CancellationToken.None);
 
         Assert.Equal("admin", result.Username);
+        Assert.Equal(Roles.Admin, result.Role);
         Assert.False(string.IsNullOrWhiteSpace(result.Token));
     }
 

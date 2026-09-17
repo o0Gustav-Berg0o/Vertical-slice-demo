@@ -134,7 +134,7 @@ function renderAuthPanel() {
   const token = activeToken();
 
   if (token) {
-    status.textContent = `signed in as ${token.username} on ${activeBackend().name} (expires ${new Date(token.expiresAtUtc).toLocaleTimeString()})`;
+    status.textContent = `signed in as ${token.username} (${token.role}) on ${activeBackend().name} (expires ${new Date(token.expiresAtUtc).toLocaleTimeString()})`;
     status.classList.add("online");
     protectedArea.hidden = false;
   } else {
@@ -251,9 +251,10 @@ function setupForms() {
         token: result.token,
         expiresAtUtc: result.expiresAtUtc,
         username: result.username,
+        role: result.role,
       };
       renderAuthPanel();
-      log(`Signed in as ${result.username} on ${activeBackend().name}`, "success");
+      log(`Signed in as ${result.username} (${result.role}) on ${activeBackend().name}`, "success");
       await loadProducts();
     } catch (err) {
       log(`Login failed: ${err.message}`, "error");

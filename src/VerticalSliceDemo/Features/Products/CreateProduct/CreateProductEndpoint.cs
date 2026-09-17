@@ -1,4 +1,5 @@
 using MediatR;
+using VerticalSliceDemo.Data.Entities;
 using VerticalSliceDemo.Features.Shared.Abstractions;
 
 namespace VerticalSliceDemo.Features.Products.CreateProduct;
@@ -14,7 +15,7 @@ public class CreateProductEndpoint : IEndpoint
             })
             .WithName("CreateProduct")
             .WithTags("Products")
-            .RequireAuthorization()
+            .RequireAuthorization(policy => policy.RequireRole(Roles.Admin))
             .Produces<CreateProductResponse>(StatusCodes.Status201Created)
             .ProducesValidationProblem();
     }

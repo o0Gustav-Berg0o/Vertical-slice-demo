@@ -17,6 +17,6 @@ public class LoginHandler(AppDbContext db, IJwtTokenGenerator tokenGenerator) : 
         }
 
         var (token, expiresAtUtc) = tokenGenerator.GenerateToken(user);
-        return new LoginResponse(token, expiresAtUtc, user.Username);
+        return new LoginResponse(token, expiresAtUtc, user.Username, user.Role);
     }
 }
