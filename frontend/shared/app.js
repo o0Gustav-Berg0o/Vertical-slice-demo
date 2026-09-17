@@ -1,35 +1,14 @@
-const BACKENDS = [
-  {
-    id: "vsa",
-    name: "Vertical Slice API",
-    description: "Feature folders: Command/Handler/Validator per slice (MediatR)",
-    url: "http://localhost:5010",
-  },
-  {
-    id: "layered",
-    name: "Layered API",
-    description: "Controller → Service → Repository → Data",
-    url: "http://localhost:5136",
-  },
-];
+// Expects window.BACKEND = { name, description, url } to be set before this script loads.
+const BACKEND = window.BACKEND;
 
 const state = {
-  activeBackendId: BACKENDS[0].id,
+  token: null, // { token, expiresAtUtc, username, role }
   products: [],
   lineItemCount: 0,
-  tokens: {}, // backendId -> { token, expiresAtUtc, username }
 };
 
-function activeBackend() {
-  return BACKENDS.find((b) => b.id === state.activeBackendId);
-}
-
-function activeToken() {
-  return state.tokens[state.activeBackendId] || null;
-}
-
 function apiUrl(path) {
-  return `${activeBackend().url}${path}`;
+  return `${BACKEND.url}${path}`;
 }
 
 function log(message, type = "info") {
@@ -45,10 +24,9 @@ function log(message, type = "info") {
 }
 
 async function apiFetch(path, options = {}) {
-  const token = activeToken();
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
-  if (token) {
-    headers.Authorization = `Bearer ${token.token}`;
+  if (state.token) {
+    headers.Authorization = `Bearer ${state.token.token}`;
   }
 
   const response = await fetch(apiUrl(path), { ...options, headers });
@@ -65,7 +43,7 @@ async function apiFetch(path, options = {}) {
 
   if (!response.ok) {
     if (response.status === 401) {
-      delete state.tokens[state.activeBackendId];
+      state.token = null;
       renderAuthPanel();
     }
 
@@ -86,40 +64,19 @@ async function apiFetch(path, options = {}) {
   return body;
 }
 
-function renderBackendSwitcher() {
-  const container = document.getElementById("backend-switcher");
-  container.innerHTML = "";
-
-  for (const backend of BACKENDS) {
-    const card = document.createElement("div");
-    card.className = "backend-card" + (backend.id === state.activeBackendId ? " active" : "");
-    card.innerHTML = `
-      <h3><span class="status-dot" id="status-${backend.id}"></span>${backend.name}</h3>
-      <p>${backend.description}</p>
-      <div class="url">${backend.url}</div>
-    `;
-    card.addEventListener("click", () => {
-      state.activeBackendId = backend.id;
-      renderBackendSwitcher();
-      renderAuthPanel();
-      if (activeToken()) {
-        loadProducts();
-      }
-    });
-    container.appendChild(card);
-  }
-
-  for (const backend of BACKENDS) {
-    pingBackend(backend);
-  }
+function renderBackendInfo() {
+  document.getElementById("backend-name").textContent = BACKEND.name;
+  document.getElementById("backend-description").textContent = BACKEND.description;
+  document.getElementById("backend-url").textContent = BACKEND.url;
+  pingBackend();
 }
 
-async function pingBackend(backend) {
-  const dot = document.getElementById(`status-${backend.id}`);
+async function pingBackend() {
+  const dot = document.getElementById("backend-status");
   if (!dot) return;
   try {
     // Any response (even 401) means the server is reachable.
-    await fetch(`${backend.url}/api/products`);
+    await fetch(`${BACKEND.url}/api/products`);
     dot.classList.add("online");
     dot.classList.remove("offline");
   } catch {
@@ -131,14 +88,13 @@ async function pingBackend(backend) {
 function renderAuthPanel() {
   const status = document.getElementById("auth-status");
   const protectedArea = document.getElementById("protected-area");
-  const token = activeToken();
 
-  if (token) {
-    status.textContent = `signed in as ${token.username} (${token.role}) on ${activeBackend().name} (expires ${new Date(token.expiresAtUtc).toLocaleTimeString()})`;
+  if (state.token) {
+    status.textContent = `signed in as ${state.token.username} (${state.token.role}) (expires ${new Date(state.token.expiresAtUtc).toLocaleTimeString()})`;
     status.classList.add("online");
     protectedArea.hidden = false;
   } else {
-    status.textContent = `not signed in to ${activeBackend().name}`;
+    status.textContent = "not signed in";
     status.classList.remove("online");
     protectedArea.hidden = true;
   }
@@ -177,7 +133,7 @@ async function loadProducts() {
     renderProductsTable();
     refreshLineItemProductOptions();
   } catch (err) {
-    log(`Failed to load products from ${activeBackend().name}: ${err.message}`, "error");
+    log(`Failed to load products: ${err.message}`, "error");
     state.products = [];
     renderProductsTable();
   }
@@ -247,14 +203,14 @@ function setupForms() {
         method: "POST",
         body: JSON.stringify(request),
       });
-      state.tokens[state.activeBackendId] = {
+      state.token = {
         token: result.token,
         expiresAtUtc: result.expiresAtUtc,
         username: result.username,
         role: result.role,
       };
       renderAuthPanel();
-      log(`Signed in as ${result.username} (${result.role}) on ${activeBackend().name}`, "success");
+      log(`Signed in as ${result.username} (${result.role})`, "success");
       await loadProducts();
     } catch (err) {
       log(`Login failed: ${err.message}`, "error");
@@ -275,7 +231,7 @@ function setupForms() {
         method: "POST",
         body: JSON.stringify(request),
       });
-      log(`Created product #${product.id} "${product.name}" via ${activeBackend().name}`, "success");
+      log(`Created product #${product.id} "${product.name}"`, "success");
       e.target.reset();
       await loadProducts();
     } catch (err) {
@@ -307,7 +263,7 @@ function setupForms() {
         body: JSON.stringify(request),
       });
       log(
-        `Created order #${order.id} for ${order.customerName} (total ${order.totalAmount.toFixed(2)}) via ${activeBackend().name}`,
+        `Created order #${order.id} for ${order.customerName} (total ${order.totalAmount.toFixed(2)})`,
         "success"
       );
       e.target.reset();
@@ -326,7 +282,7 @@ function setupForms() {
     try {
       const order = await apiFetch(`/api/orders/${id}`);
       view.innerHTML = `<pre>${escapeHtml(JSON.stringify(order, null, 2))}</pre>`;
-      log(`Fetched order #${id} via ${activeBackend().name}`, "success");
+      log(`Fetched order #${id}`, "success");
     } catch (err) {
       view.innerHTML = `<p class="muted">${escapeHtml(err.message)}</p>`;
       log(`Fetch order #${id} failed: ${err.message}`, "error");
@@ -334,7 +290,7 @@ function setupForms() {
   });
 }
 
-renderBackendSwitcher();
+renderBackendInfo();
 renderAuthPanel();
 setupForms();
 addLineItem();

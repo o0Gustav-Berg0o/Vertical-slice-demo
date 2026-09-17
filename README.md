@@ -1,8 +1,8 @@
 # Architecture Comparison Demo
 
 Two .NET 10 Web APIs implementing the **identical domain and HTTP contract** (Products,
-Orders) with two different architectural styles, plus one frontend that can drive either
-one — so you can compare the styles side by side without the API surface changing.
+Orders) with two different architectural styles, each with its own dedicated frontend —
+so you can compare the styles side by side without the API surface changing.
 
 | | Vertical Slice API | Layered API |
 |---|---|---|
@@ -119,13 +119,23 @@ Notes:
   and issuers, even though the DTO shapes match.
 - Requests without a valid token get `401 Unauthorized`; a failed login also returns `401`.
 
-## 3. Frontend (`frontend/`)
+## 3. Frontends (`frontend/`)
 
-A dependency-free static page (plain HTML/CSS/JS, no build step) that can log in, then
-create/list products and create/look up orders against **either** backend — pick one from
-the cards at the top of the page. The demo credentials are pre-filled in the login form.
-Signing in to one backend does not carry over to the other, since each issues its own token.
-Both APIs enable CORS (`AllowAnyOrigin`) for local development so the page can call them
+Two dependency-free static pages (plain HTML/CSS/JS, no build step), one per backend, each
+hard-wired to its own API so there's no switcher and no ambiguity about which backend a
+click hits:
+
+```
+frontend/
+├── shared/    (styles.css + app.js — the UI logic, parameterized by window.BACKEND)
+├── vsa/       (index.html for the Vertical Slice API, http://localhost:5010)
+└── layered/   (index.html for the Layered API, http://localhost:5136)
+```
+
+Each page can log in, then create/list products and create/look up orders against its one
+backend. The demo credentials are pre-filled in the login form (`admin`/`Passw0rd!` for the
+Admin role, or `user`/`Passw0rd!` for the User role — creating a product requires Admin).
+Both APIs enable CORS (`AllowAnyOrigin`) for local development so the pages can call them
 directly from a different origin.
 
 ```bash
@@ -133,7 +143,8 @@ cd frontend
 python3 -m http.server 8080   # or any static file server
 ```
 
-Then open http://localhost:8080, with both APIs running (see above) in the background.
+Then open http://localhost:8080/vsa/ or http://localhost:8080/layered/, with the
+corresponding API running (see above) in the background.
 
 ## Stack (both APIs)
 

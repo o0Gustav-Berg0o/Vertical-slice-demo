@@ -3,17 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Products &amp; Orders Demo</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>Layered API — Products &amp; Orders</title>
+  <link rel="stylesheet" href="../shared/styles.css" />
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>Products &amp; Orders Demo</h1>
-      <p>One frontend, two backends with the identical API contract &mdash; a Vertical Slice API and a mirrored Layered (Controller/Service/Repository) API.</p>
+      <h1>Layered API</h1>
+      <p>Products &amp; Orders demo UI, talking to the Layered (Controller / Service / Repository) backend only.</p>
     </header>
 
-    <div class="backend-switcher" id="backend-switcher"></div>
+    <div class="backend-info">
+      <h3><span class="status-dot" id="backend-status"></span><span id="backend-name"></span></h3>
+      <p id="backend-description"></p>
+      <div class="url" id="backend-url"></div>
+    </div>
 
     <section class="panel auth-panel" id="auth-panel">
       <h2>Sign in <span class="muted" id="auth-status">not signed in</span></h2>
@@ -26,7 +30,7 @@
         </label>
         <button type="submit">Sign in</button>
       </form>
-      <p class="muted">Demo credentials are pre-filled. Each backend issues its own token &mdash; switching backends requires signing in again.</p>
+      <p class="muted">Demo credentials are pre-filled (admin/Admin role, or use "user" for the User role).</p>
     </section>
 
     <div class="grid" id="protected-area" hidden>
@@ -47,6 +51,7 @@
           </label>
           <button type="submit">Create product</button>
         </form>
+        <p class="muted">Requires the Admin role.</p>
       </section>
 
       <section class="panel">
@@ -91,6 +96,13 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script>
+    window.BACKEND = {
+      name: "Layered API",
+      description: "Controller → Service → Repository → Data",
+      url: "http://localhost:5136",
+    };
+  </script>
+  <script src="../shared/app.js"></script>
 </body>
 </html>

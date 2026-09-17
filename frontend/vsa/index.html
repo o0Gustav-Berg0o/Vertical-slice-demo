@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vertical Slice API — Products &amp; Orders</title>
+  <link rel="stylesheet" href="../shared/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Vertical Slice API</h1>
+      <p>Products &amp; Orders demo UI, talking to the Vertical Slice (feature-folder / MediatR) backend only.</p>
+    </header>
+
+    <div class="backend-info">
+      <h3><span class="status-dot" id="backend-status"></span><span id="backend-name"></span></h3>
+      <p id="backend-description"></p>
+      <div class="url" id="backend-url"></div>
+    </div>
+
+    <section class="panel auth-panel" id="auth-panel">
+      <h2>Sign in <span class="muted" id="auth-status">not signed in</span></h2>
+      <form id="login-form">
+        <label>Username
+          <input type="text" id="login-username" required value="admin" />
+        </label>
+        <label>Password
+          <input type="password" id="login-password" required value="Passw0rd!" />
+        </label>
+        <button type="submit">Sign in</button>
+      </form>
+      <p class="muted">Demo credentials are pre-filled (admin/Admin role, or use "user" for the User role).</p>
+    </section>
+
+    <div class="grid" id="protected-area" hidden>
+      <section class="panel">
+        <h2>Create product</h2>
+        <form id="product-form">
+          <label>Name
+            <input type="text" id="product-name" required maxlength="200" placeholder="Widget" />
+          </label>
+          <label>Description
+            <input type="text" id="product-description" maxlength="2000" placeholder="A useful widget" />
+          </label>
+          <label>Price
+            <input type="number" id="product-price" required min="0.01" step="0.01" placeholder="9.99" />
+          </label>
+          <label>Stock quantity
+            <input type="number" id="product-stock" required min="0" step="1" placeholder="100" />
+          </label>
+          <button type="submit">Create product</button>
+        </form>
+        <p class="muted">Requires the Admin role.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Products <button class="secondary icon" id="refresh-products" type="button">Refresh</button></h2>
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Name</th><th>Price</th><th>Stock</th></tr>
+          </thead>
+          <tbody id="products-table-body">
+            <tr><td colspan="4" class="muted">No products loaded yet.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <h2>Create order</h2>
+        <form id="order-form">
+          <label>Customer name
+            <input type="text" id="order-customer" required maxlength="200" placeholder="Ada Lovelace" />
+          </label>
+          <div class="line-items" id="line-items"></div>
+          <button type="button" class="secondary" id="add-line-item">+ Add line item</button>
+          <button type="submit">Create order</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Look up order</h2>
+        <form id="order-lookup-form">
+          <label>Order ID
+            <input type="number" id="order-lookup-id" required min="1" placeholder="1" />
+          </label>
+          <button type="submit" class="secondary">Fetch order</button>
+        </form>
+        <div class="order-view" id="order-view"></div>
+      </section>
+    </div>
+
+    <div class="log">
+      <h2>Activity log</h2>
+      <div class="log-entries" id="log-entries"></div>
+    </div>
+  </div>
+
+  <script>
+    window.BACKEND = {
+      name: "Vertical Slice API",
+      description: "Feature folders: Command/Handler/Validator per slice (MediatR)",
+      url: "http://localhost:5010",
+    };
+  </script>
+  <script src="../shared/app.js"></script>
+</body>
+</html>
