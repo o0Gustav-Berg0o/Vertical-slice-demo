@@ -49,7 +49,11 @@ async function apiFetch(path, options = {}) {
 
     const detail =
       (body && (body.detail || body.title)) ||
-      (response.status === 401 ? "Not authenticated" : `HTTP ${response.status}`);
+      (response.status === 401
+        ? "Not authenticated"
+        : response.status === 403
+          ? "Forbidden — you don't have the required role for this action."
+          : `HTTP ${response.status}`);
     const errors = body && body.errors
       ? Object.entries(body.errors)
           .map(([field, msgs]) => `${field}: ${msgs.join(", ")}`)
@@ -85,12 +89,16 @@ async function pingBackend() {
   }
 }
 
+function describeRoles(roles) {
+  return roles && roles.length > 0 ? roles.join(", ") : "no role";
+}
+
 function renderAuthPanel() {
   const status = document.getElementById("auth-status");
   const protectedArea = document.getElementById("protected-area");
 
   if (state.token) {
-    status.textContent = `signed in as ${state.token.username} (${state.token.role}) (expires ${new Date(state.token.expiresAtUtc).toLocaleTimeString()})`;
+    status.textContent = `signed in as ${state.token.username} (${describeRoles(state.token.roles)}) (expires ${new Date(state.token.expiresAtUtc).toLocaleTimeString()})`;
     status.classList.add("online");
     protectedArea.hidden = false;
   } else {
@@ -207,13 +215,33 @@ function setupForms() {
         token: result.token,
         expiresAtUtc: result.expiresAtUtc,
         username: result.username,
-        role: result.role,
+        roles: result.roles,
       };
       renderAuthPanel();
-      log(`Signed in as ${result.username} (${result.role})`, "success");
+      log(`Signed in as ${result.username} (${describeRoles(result.roles)})`, "success");
       await loadProducts();
     } catch (err) {
       log(`Login failed: ${err.message}`, "error");
+    }
+  });
+
+  document.getElementById("register-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const request = {
+      username: document.getElementById("register-username").value,
+      email: document.getElementById("register-email").value,
+      password: document.getElementById("register-password").value,
+    };
+
+    try {
+      const result = await apiFetch("/api/auth/register", {
+        method: "POST",
+        body: JSON.stringify(request),
+      });
+      log(`Registered "${result.username}" — sign in above to get a token.`, "success");
+      e.target.reset();
+    } catch (err) {
+      log(`Register failed: ${err.message}`, "error");
     }
   });
 

@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/VerticalSliceTemplate/VerticalSliceTemplate.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/VerticalSliceTemplate.Tests/VerticalSliceTemplate.Tests.csproj" />
+  </Folder>
+  <Project Path="frontend/Frontend.csproj" />
+</Solution>
