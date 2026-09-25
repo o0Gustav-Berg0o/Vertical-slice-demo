@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace VerticalSliceTemplate.Features.Orders.CreateOrder;
 
-public class CreateOrderValidator : AbstractValidator<CreateOrderCommand>
+public class CreateOrderValidator : AbstractValidator<CreateOrderRequest>
 {
     public CreateOrderValidator()
     {

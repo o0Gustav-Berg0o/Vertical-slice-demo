@@ -1,21 +1,30 @@
-using MediatR;
-using VerticalSliceTemplate.Features.Shared.Abstractions;
+using FastEndpoints;
+using Microsoft.EntityFrameworkCore;
+using VerticalSliceTemplate.Data;
 
 namespace VerticalSliceTemplate.Features.Products.GetProduct;
 
-public class GetProductEndpoint : IEndpoint
+public class GetProductEndpoint(AppDbContext db) : Endpoint<GetProductRequest, GetProductResponse>
 {
-    public static void MapEndpoint(IEndpointRouteBuilder app)
+    public override void Configure()
     {
-        app.MapGet("/api/products/{id:int}", async (int id, ISender sender) =>
-            {
-                var result = await sender.Send(new GetProductQuery(id));
-                return result is not null ? Results.Ok(result) : Results.NotFound();
-            })
-            .WithName("GetProduct")
-            .WithTags("Products")
-            .RequireAuthorization()
-            .Produces<GetProductResponse>()
-            .Produces(StatusCodes.Status404NotFound);
+        Get("/api/products/{id}");
+        // No Roles(...) call — just secure-by-default, any signed-in user.
+    }
+
+    public override async Task HandleAsync(GetProductRequest req, CancellationToken ct)
+    {
+        var product = await db.Products
+            .Where(p => p.Id == req.Id)
+            .Select(p => new GetProductResponse(p.Id, p.Name, p.Description, p.Price, p.StockQuantity, p.CreatedAt))
+            .FirstOrDefaultAsync(ct);
+
+        if (product is null)
+        {
+            await Send.NotFoundAsync(ct);
+            return;
+        }
+
+        await Send.OkAsync(product, ct);
     }
 }

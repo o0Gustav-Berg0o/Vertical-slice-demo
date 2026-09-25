@@ -1,3 +1,4 @@
+using FastEndpoints;
 using VerticalSliceTemplate.Data.Entities;
 using VerticalSliceTemplate.Features.Products.ListProducts;
 using VerticalSliceTemplate.Tests.Common;
@@ -5,10 +6,10 @@ using Xunit;
 
 namespace VerticalSliceTemplate.Tests.Features.Products;
 
-public class ListProductsHandlerTests
+public class ListProductsEndpointTests
 {
     [Fact]
-    public async Task Handle_ReturnsProductsOrderedByName()
+    public async Task HandleAsync_ReturnsProductsOrderedByName()
     {
         using var db = TestDbContextFactory.Create();
         db.Products.AddRange(
@@ -16,11 +17,11 @@ public class ListProductsHandlerTests
             new Product { Name = "Apple", Price = 2m, StockQuantity = 2 });
         await db.SaveChangesAsync();
 
-        var handler = new ListProductsHandler(db);
-        var result = await handler.Handle(new ListProductsQuery(), CancellationToken.None);
+        var ep = Factory.Create<ListProductsEndpoint>(db);
+        await ep.HandleAsync(CancellationToken.None);
 
-        Assert.Equal(2, result.Count);
-        Assert.Equal("Apple", result[0].Name);
-        Assert.Equal("Zebra", result[1].Name);
+        Assert.Equal(2, ep.Response.Count);
+        Assert.Equal("Apple", ep.Response[0].Name);
+        Assert.Equal("Zebra", ep.Response[1].Name);
     }
 }

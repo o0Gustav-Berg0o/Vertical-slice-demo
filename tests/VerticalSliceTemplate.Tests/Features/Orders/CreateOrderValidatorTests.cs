@@ -8,11 +8,11 @@ public class CreateOrderValidatorTests
     private readonly CreateOrderValidator _validator = new();
 
     [Fact]
-    public void Validate_ValidCommand_HasNoErrors()
+    public void Validate_ValidRequest_HasNoErrors()
     {
-        var command = new CreateOrderCommand("Ada Lovelace", [new CreateOrderLineItem(1, 2)]);
+        var request = new CreateOrderRequest("Ada Lovelace", [new CreateOrderLineItem(1, 2)]);
 
-        var result = _validator.Validate(command);
+        var result = _validator.Validate(request);
 
         Assert.True(result.IsValid);
     }
@@ -20,9 +20,9 @@ public class CreateOrderValidatorTests
     [Fact]
     public void Validate_NoItems_HasError()
     {
-        var command = new CreateOrderCommand("Ada Lovelace", []);
+        var request = new CreateOrderRequest("Ada Lovelace", []);
 
-        var result = _validator.Validate(command);
+        var result = _validator.Validate(request);
 
         Assert.False(result.IsValid);
     }
@@ -30,9 +30,9 @@ public class CreateOrderValidatorTests
     [Fact]
     public void Validate_MissingCustomerName_HasError()
     {
-        var command = new CreateOrderCommand("", [new CreateOrderLineItem(1, 2)]);
+        var request = new CreateOrderRequest("", [new CreateOrderLineItem(1, 2)]);
 
-        var result = _validator.Validate(command);
+        var result = _validator.Validate(request);
 
         Assert.False(result.IsValid);
     }

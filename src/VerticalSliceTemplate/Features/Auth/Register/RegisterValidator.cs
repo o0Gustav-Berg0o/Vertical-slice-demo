@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace VerticalSliceTemplate.Features.Auth.Register;
 
-public class RegisterValidator : AbstractValidator<RegisterCommand>
+public class RegisterValidator : AbstractValidator<RegisterRequest>
 {
     public RegisterValidator()
     {

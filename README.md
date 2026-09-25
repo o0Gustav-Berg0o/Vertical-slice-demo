@@ -42,18 +42,17 @@ dotnet ef database update
 src/VerticalSliceTemplate/
 ├── Features/
 │   ├── Products/
-│   │   ├── CreateProduct/   (Command, Handler, Validator, Response, Endpoint — the reference slice)
-│   │   ├── GetProduct/      (Query, Handler, Response, Endpoint)
-│   │   └── ListProducts/    (Query, Handler, Response, Endpoint)
+│   │   ├── CreateProduct/   (Request, Validator, Response, Endpoint — the reference slice)
+│   │   ├── GetProduct/      (Request, Response, Endpoint)
+│   │   └── ListProducts/    (Response, Endpoint — no Request, it takes no input)
 │   ├── Orders/
-│   │   ├── CreateOrder/     (Command, Handler, Validator, Response, Endpoint)
-│   │   └── GetOrder/        (Query, Handler, Response, Endpoint)
+│   │   ├── CreateOrder/     (Request, Validator, Response, Endpoint)
+│   │   └── GetOrder/        (Request, Response, Endpoint)
 │   ├── Auth/
-│   │   ├── Login/           (Command, Handler, Validator, Response, Endpoint — AllowAnonymous)
-│   │   └── Register/        (Command, Handler, Validator, Response, Endpoint — AllowAnonymous)
+│   │   ├── Login/           (Request, Validator, Response, Endpoint — AllowAnonymous)
+│   │   └── Register/        (Request, Validator, Response, Endpoint — AllowAnonymous)
 │   ├── Shared/
-│   │   ├── Abstractions/    (IEndpoint, ValidationBehavior, NotFoundException, UnauthorizedException)
-│   │   ├── Extensions/      (DI + endpoint-mapping helpers — the auto-registration "magic")
+│   │   ├── Abstractions/    (NotFoundException, UnauthorizedException)
 │   │   └── Security/        (JwtOptions, JwtTokenGenerator)
 │   └── README.md            (deep dive on the vertical slice pattern itself)
 ├── Data/
@@ -67,7 +66,7 @@ src/VerticalSliceTemplate/
 ```
 
 See **[Features/README.md](src/VerticalSliceTemplate/Features/README.md)** for a full
-walkthrough of the vertical slice pattern — the folder-per-feature convention, the 5-file
+walkthrough of the vertical slice pattern — the folder-per-feature convention, the 4-file
 shape, and how a new slice gets picked up automatically with zero changes to `Program.cs`.
 
 Want hands-on practice? **[OVNING-TodoApp-VerticalSlice.md](OVNING-TodoApp-VerticalSlice.md)**
@@ -108,15 +107,17 @@ curl http://localhost:5010/api/products -H "Authorization: Bearer <token>"
 ## Adding a new feature
 
 1. Create a folder under `Features/<Area>/<FeatureName>/`.
-2. Add a `Command`/`Query` (implements `IRequest<TResponse>`), a `Response` record, a
-   `Handler` (implements `IRequestHandler<,>`), and — if the input needs validating — a
-   `Validator` (`AbstractValidator<T>`).
-3. Add an `Endpoint` class implementing `IEndpoint` and map the route in `MapEndpoint`.
-   Add `.RequireAuthorization()` unless the endpoint should be reachable without logging in.
-4. That's it — `AddFeatures`/`MapFeatureEndpoints` (see `Features/Shared/Extensions/`) scan
-   the assembly for handlers, validators, and endpoints at startup, so nothing else needs
-   registering. `Features/Products/CreateProduct/` is the fastest way to see the shape —
-   copy it as a starting point.
+2. Add a `Request` record, a `Response` record, and — if the input needs validating — a
+   `Validator` (`AbstractValidator<TRequest>`).
+3. Add an `Endpoint` class deriving from `Endpoint<TRequest, TResponse>` (or
+   `EndpointWithoutRequest<TResponse>` if there's no input). Set the route and any auth
+   rules in `Configure()`, and put the actual logic in `HandleAsync` — there's no separate
+   Handler class, the endpoint *is* the handler. Every endpoint requires a signed-in user
+   by default; call `AllowAnonymous()` in `Configure()` if it shouldn't.
+4. That's it — `AddFastEndpoints()`/`UseFastEndpoints()` (see `Program.cs`) scan the
+   assembly for endpoints and validators at startup, so nothing else needs registering.
+   `Features/Products/CreateProduct/` is the fastest way to see the shape — copy it as a
+   starting point.
 
 ## Frontend (`frontend/`)
 
@@ -139,8 +140,9 @@ from a different origin. See **[frontend/README.md](frontend/README.md)** for de
 - **ASP.NET Core Identity** (`AddIdentityCore` + EF Core stores) for user/role management
 - **JWT bearer authentication** (`Microsoft.AspNetCore.Authentication.JwtBearer`) issued
   after a successful Identity login
-- **MediatR** for in-process command/query dispatch
-- **FluentValidation**, wired in as a MediatR pipeline behavior
+- **FastEndpoints** for routing — each feature's `Endpoint<TRequest, TResponse>` class
+  handles its own request directly, no mediator layer in between
+- **FluentValidation**, auto-discovered and run by FastEndpoints before `HandleAsync`
 - **EF Core (SQLite)** for persistence, **EF Core InMemory** for tests
 - **xUnit** for unit tests
 
@@ -150,7 +152,9 @@ from a different origin. See **[frontend/README.md](frontend/README.md)** for de
 dotnet test
 ```
 
-Covers handler and validator tests for every feature, including `Login`/`Register`/
-`DbSeeder` tests that exercise real `UserManager`/`SignInManager`/`RoleManager` instances
-against an in-memory database (see `tests/VerticalSliceTemplate.Tests/Common/IdentityTestFactory.cs`)
-rather than mocking Identity's manager classes.
+Covers endpoint and validator tests for every feature, including `Login`/`Register`
+tests that exercise real `UserManager`/`SignInManager`/`RoleManager` instances against an
+in-memory database (see `tests/VerticalSliceTemplate.Tests/Common/IdentityTestFactory.cs`)
+rather than mocking Identity's manager classes. Endpoint tests use FastEndpoints'
+`Factory.Create<TEndpoint>(...)` to instantiate an endpoint directly and call `HandleAsync`,
+asserting on its `Response` — no `WebApplicationFactory` or real HTTP server needed.

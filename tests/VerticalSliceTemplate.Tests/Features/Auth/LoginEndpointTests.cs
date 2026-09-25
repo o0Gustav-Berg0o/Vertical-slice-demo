@@ -1,3 +1,4 @@
+using FastEndpoints;
 using Microsoft.AspNetCore.Identity;
 using VerticalSliceTemplate.Data.Entities;
 using VerticalSliceTemplate.Features.Auth.Login;
@@ -8,7 +9,7 @@ using Xunit;
 
 namespace VerticalSliceTemplate.Tests.Features.Auth;
 
-public class LoginHandlerTests
+public class LoginEndpointTests
 {
     private static IJwtTokenGenerator CreateTokenGenerator() =>
         new JwtTokenGenerator(Microsoft.Extensions.Options.Options.Create(new JwtOptions
@@ -20,7 +21,7 @@ public class LoginHandlerTests
         }));
 
     [Fact]
-    public async Task Handle_ValidCredentials_ReturnsTokenWithRoles()
+    public async Task HandleAsync_ValidCredentials_ReturnsTokenWithRoles()
     {
         using var db = TestDbContextFactory.Create();
         var (users, signIn, roles) = IdentityTestFactory.Create(db);
@@ -29,49 +30,49 @@ public class LoginHandlerTests
         await users.CreateAsync(user, "Passw0rd!");
         await users.AddToRoleAsync(user, Roles.Admin);
 
-        var handler = new LoginHandler(signIn, users, CreateTokenGenerator());
-        var result = await handler.Handle(new LoginCommand("admin", "Passw0rd!"), CancellationToken.None);
+        var ep = Factory.Create<LoginEndpoint>(signIn, users, CreateTokenGenerator());
+        await ep.HandleAsync(new LoginRequest("admin", "Passw0rd!"), CancellationToken.None);
 
-        Assert.Equal("admin", result.Username);
-        Assert.Contains(Roles.Admin, result.Roles);
-        Assert.False(string.IsNullOrWhiteSpace(result.Token));
+        Assert.Equal("admin", ep.Response.Username);
+        Assert.Contains(Roles.Admin, ep.Response.Roles);
+        Assert.False(string.IsNullOrWhiteSpace(ep.Response.Token));
     }
 
     [Fact]
-    public async Task Handle_InvalidPassword_ThrowsUnauthorizedException()
+    public async Task HandleAsync_InvalidPassword_ThrowsUnauthorizedException()
     {
         using var db = TestDbContextFactory.Create();
         var (users, signIn, _) = IdentityTestFactory.Create(db);
         await users.CreateAsync(new ApplicationUser { UserName = "admin", Email = "admin@example.com" }, "Passw0rd!");
 
-        var handler = new LoginHandler(signIn, users, CreateTokenGenerator());
+        var ep = Factory.Create<LoginEndpoint>(signIn, users, CreateTokenGenerator());
 
         await Assert.ThrowsAsync<UnauthorizedException>(
-            () => handler.Handle(new LoginCommand("admin", "wrong"), CancellationToken.None));
+            () => ep.HandleAsync(new LoginRequest("admin", "wrong"), CancellationToken.None));
     }
 
     [Fact]
-    public async Task Handle_UnknownUser_ThrowsUnauthorizedException()
+    public async Task HandleAsync_UnknownUser_ThrowsUnauthorizedException()
     {
         using var db = TestDbContextFactory.Create();
         var (users, signIn, _) = IdentityTestFactory.Create(db);
 
-        var handler = new LoginHandler(signIn, users, CreateTokenGenerator());
+        var ep = Factory.Create<LoginEndpoint>(signIn, users, CreateTokenGenerator());
 
         await Assert.ThrowsAsync<UnauthorizedException>(
-            () => handler.Handle(new LoginCommand("nobody", "whatever"), CancellationToken.None));
+            () => ep.HandleAsync(new LoginRequest("nobody", "whatever"), CancellationToken.None));
     }
 
     [Fact]
-    public async Task Handle_UserWithNoRole_ReturnsEmptyRoles()
+    public async Task HandleAsync_UserWithNoRole_ReturnsEmptyRoles()
     {
         using var db = TestDbContextFactory.Create();
         var (users, signIn, _) = IdentityTestFactory.Create(db);
         await users.CreateAsync(new ApplicationUser { UserName = "user", Email = "user@example.com" }, "Passw0rd!");
 
-        var handler = new LoginHandler(signIn, users, CreateTokenGenerator());
-        var result = await handler.Handle(new LoginCommand("user", "Passw0rd!"), CancellationToken.None);
+        var ep = Factory.Create<LoginEndpoint>(signIn, users, CreateTokenGenerator());
+        await ep.HandleAsync(new LoginRequest("user", "Passw0rd!"), CancellationToken.None);
 
-        Assert.Empty(result.Roles);
+        Assert.Empty(ep.Response.Roles);
     }
 }

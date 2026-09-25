@@ -1,4 +1,5 @@
 using System.Text;
+using FastEndpoints;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -7,7 +8,6 @@ using Microsoft.IdentityModel.Tokens;
 using VerticalSliceTemplate.Data;
 using VerticalSliceTemplate.Data.Entities;
 using VerticalSliceTemplate.Features.Shared.Abstractions;
-using VerticalSliceTemplate.Features.Shared.Extensions;
 using VerticalSliceTemplate.Features.Shared.Security;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,9 +18,13 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")
                        ?? "Data Source=verticalslicetemplate.db"));
 
-// Scans this assembly for MediatR handlers, FluentValidation validators, and
-// wires the ValidationBehavior pipeline — see ServiceCollectionExtensions.
-builder.Services.AddFeatures(typeof(Program).Assembly);
+// FastEndpoints scans this assembly for every class deriving from Endpoint<,>
+// (or EndpointWithoutRequest<>) at startup and registers it — no manual list to
+// maintain. IncludeAbstractValidators: true also picks up plain FluentValidation
+// AbstractValidator<TRequest> classes (every *Validator.cs in this app already
+// looks like this), so validation runs automatically before HandleAsync, same
+// as before, without needing a separate pipeline behavior.
+builder.Services.AddFastEndpoints(o => o.IncludeAbstractValidators = true);
 
 // ASP.NET Core Identity, "Core" flavor: AddIdentityCore (not the full AddIdentity)
 // gives us UserManager/SignInManager/RoleManager and EF-Core-backed user/role
@@ -82,8 +86,7 @@ builder.Services
         };
     });
 
-// Enables .RequireAuthorization() and role-based policies like
-// .RequireAuthorization(policy => policy.RequireRole("Admin")) on endpoints.
+// Enables role-based checks like Roles("Admin") in an endpoint's Configure().
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
@@ -143,11 +146,14 @@ app.UseCors("Frontend");
 
 // Order matters: authentication (who are you?) must run before authorization
 // (are you allowed to do this?) — swapping these two lines breaks every
-// RequireAuthorization() check in the app.
+// Roles(...)/secure-by-default check in the app.
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapFeatureEndpoints(typeof(Program).Assembly);
+// Maps every discovered endpoint's route. Endpoints are secure by default —
+// each one requires .AllowAnonymous() explicitly to skip authentication
+// (only Login and Register do).
+app.UseFastEndpoints();
 
 app.Run();
 

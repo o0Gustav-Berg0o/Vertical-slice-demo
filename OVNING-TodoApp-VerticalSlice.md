@@ -3,7 +3,7 @@
 Den här övningen går ut på att lägga till en helt ny funktion — **Todos** — i
 `src/VerticalSliceTemplate`, byggd på exakt samma sätt som `Features/Products` och
 `Features/Orders` redan är gjorda: en mapp per handling (slice), med sitt eget
-`Command`/`Query`, `Handler`, `Validator` och `Endpoint`, utan delade
+`Request`, `Validator` och `Endpoint`, utan delade
 "lager" (ingen `ProductService`, ingen `ProductRepository`).
 
 Facit finns längst ner om du fastnar, men försök själv steg för steg först —
@@ -20,8 +20,9 @@ När du är klar ska du kunna:
 - `PATCH /api/todos/{id}/complete` — markera en todo som klar
 - `DELETE /api/todos/{id}` — ta bort en todo
 
-Alla endpoints ska kräva inloggning (`RequireAuthorization()`), precis som
-Products och Orders gör idag.
+Alla endpoints ska kräva inloggning. Det är standardbeteendet i FastEndpoints
+(secure by default) — du behöver inte skriva någon kod för att kräva det, bara
+undvika `AllowAnonymous()`, precis som Products och Orders gör idag.
 
 ## Innan du börjar — läs mönstret
 
@@ -30,18 +31,17 @@ Products och Orders gör idag.
 
 | Fil | Ansvar |
 |---|---|
-| `CreateProductCommand.cs` | En `record` som implementerar `IRequest<TResponse>` — själva "meddelandet" |
-| `CreateProductValidator.cs` | En `AbstractValidator<T>` (FluentValidation) — körs automatiskt av `ValidationBehavior` innan handlern nås |
-| `CreateProductHandler.cs` | En `IRequestHandler<TCommand, TResponse>` — affärslogiken, pratar direkt med `AppDbContext` |
+| `CreateProductRequest.cs` | En vanlig `record` — inget basgränssnitt att implementera. FastEndpoints binder inkommande JSON direkt till den |
+| `CreateProductValidator.cs` | En `AbstractValidator<T>` (FluentValidation) — körs automatiskt av FastEndpoints innan `HandleAsync` nås |
 | `CreateProductResponse.cs` | Vad som skickas tillbaka som JSON |
-| `CreateProductEndpoint.cs` | Implementerar `IEndpoint`, mappar en route med `app.MapPost(...)`, skickar requestet vidare med `sender.Send(command)` |
+| `CreateProductEndpoint.cs` | Ärver `Endpoint<TRequest, TResponse>`. `Configure()` sätter route och auth-regler; `HandleAsync` *är* affärslogiken — pratar direkt med `AppDbContext`, ingen separat Handler-klass |
 
-`Features/Shared/Extensions/ServiceCollectionExtensions.cs` och
-`WebApplicationExtensions.cs` scannar assemblyn med reflection och
-registrerar/mappar automatiskt allt som implementerar `IRequestHandler`,
-`AbstractValidator` respektive `IEndpoint` — **du behöver alltså inte
-registrera något manuellt i `Program.cs`**. Skapa filerna på rätt ställe
-med rätt gränssnitt, så plockas de upp automatiskt.
+`builder.Services.AddFastEndpoints(...)` och `app.UseFastEndpoints()` i
+`Program.cs` scannar assemblyn vid uppstart och hittar automatiskt varje klass
+som ärver från `Endpoint<,>`/`EndpointWithoutRequest<>`, plus varje
+`AbstractValidator<T>` — **du behöver alltså inte registrera något manuellt i
+`Program.cs`**. Skapa filerna på rätt ställe och ärv från rätt basklass, så
+plockas de upp automatiskt.
 
 ## Steg 1 — Entiteten
 
@@ -82,15 +82,15 @@ ordningen att testa i).
 
 ### 3a. `CreateTodo` — `POST /api/todos`
 
-- `CreateTodoCommand(string Title) : IRequest<CreateTodoResponse>`
+- `CreateTodoRequest(string Title)` — vanlig `record`
 - `CreateTodoValidator` — `Title` får inte vara tomt, max 200 tecken
   (`RuleFor(x => x.Title).NotEmpty().MaximumLength(200);`)
 - `CreateTodoResponse(int Id, string Title, bool IsDone, DateTime CreatedAt)`
-- `CreateTodoHandler` — skapar en `Todo`, sätter `CreatedAt = DateTime.UtcNow`,
-  `db.Todos.Add(...)`, `await db.SaveChangesAsync(...)`, returnerar en
-  `CreateTodoResponse`
-- `CreateTodoEndpoint` — `app.MapPost("/api/todos", ...)`, kom ihåg
-  `.RequireAuthorization()` och `Results.Created($"/api/todos/{result.Id}", result)`
+- `CreateTodoEndpoint` — `Endpoint<CreateTodoRequest, CreateTodoResponse>`.
+  I `Configure()`: `Post("/api/todos");`. I `HandleAsync`: skapa en `Todo`,
+  sätt `CreatedAt = DateTime.UtcNow`, `db.Todos.Add(...)`,
+  `await db.SaveChangesAsync(ct)`, och skicka svaret med
+  `await Send.ResponseAsync(response, StatusCodes.Status201Created, ct);`
   (jämför med `CreateProductEndpoint`)
 
 **Testa innan du går vidare** (se testavsnittet nedan) — bygg och gör ett
@@ -98,49 +98,49 @@ riktigt HTTP-anrop. Fortsätt inte förrän `POST /api/todos` faktiskt fungerar.
 
 ### 3b. `ListTodos` — `GET /api/todos`
 
-- `ListTodosQuery : IRequest<IReadOnlyList<ListTodosResponse>>` (ingen data
-  behövs — jämför med `ListProductsQuery`)
+- Inget Request behövs — jämför med `ListProductsEndpoint`
 - `ListTodosResponse(int Id, string Title, bool IsDone)`
-- `ListTodosHandler` — `db.Todos.OrderBy(t => t.CreatedAt).Select(...).ToListAsync(...)`
-- `ListTodosEndpoint` — `app.MapGet("/api/todos", ...)`
+- `ListTodosEndpoint` — `EndpointWithoutRequest<List<ListTodosResponse>>`.
+  `Configure()`: `Get("/api/todos");`. `HandleAsync(CancellationToken ct)`:
+  `db.Todos.OrderBy(t => t.CreatedAt).Select(...).ToListAsync(ct)`, sedan
+  `await Send.OkAsync(result, ct);`
 
 ### 3c. `GetTodo` — `GET /api/todos/{id}`
 
-- `GetTodoQuery(int Id) : IRequest<GetTodoResponse?>`
+- `GetTodoRequest(int Id)`
 - `GetTodoResponse(int Id, string Title, bool IsDone, DateTime CreatedAt)`
-- `GetTodoHandler` — hitta via `FirstOrDefaultAsync`, returnera `null` om den
-  inte finns
-- `GetTodoEndpoint` — `app.MapGet("/api/todos/{id:int}", ...)`, returnera
-  `Results.NotFound()` om resultatet är `null` (jämför med `GetProductEndpoint`)
+- `GetTodoEndpoint` — `Endpoint<GetTodoRequest, GetTodoResponse>`.
+  `Configure()`: `Get("/api/todos/{id}");`. I `HandleAsync`: hitta via
+  `FirstOrDefaultAsync`; om `null`, `await Send.NotFoundAsync(ct); return;`;
+  annars `await Send.OkAsync(response, ct);` (jämför med `GetProductEndpoint`)
 
 ### 3d. `CompleteTodo` — `PATCH /api/todos/{id}/complete`
 
 Det här är den enda slicen som inte har en direkt förebild bland Products/
 Orders — testa att lösa den själv utifrån mönstret ovan.
 
-- `CompleteTodoCommand(int Id) : IRequest<CompleteTodoResponse?>`
+- `CompleteTodoRequest(int Id)`
 - `CompleteTodoResponse(int Id, string Title, bool IsDone)`
-- `CompleteTodoHandler` — hämta todon, om `null` returnera `null`, annars
-  sätt `todo.IsDone = true`, spara, returnera svaret
-- `CompleteTodoEndpoint` — `app.MapPatch("/api/todos/{id:int}/complete", ...)`
-  (obs: `MapPatch`, inte `MapPost`), `Results.NotFound()` om `null`
+- `CompleteTodoEndpoint` — `Endpoint<CompleteTodoRequest, CompleteTodoResponse>`.
+  `Configure()`: `Patch("/api/todos/{id}/complete");`. I `HandleAsync`: hämta
+  todon, om `null` `await Send.NotFoundAsync(ct); return;`, annars sätt
+  `todo.IsDone = true`, spara, `await Send.OkAsync(response, ct);`
 
 ### 3e. `DeleteTodo` — `DELETE /api/todos/{id}`
 
-- `DeleteTodoCommand(int Id) : IRequest<bool>` (`true` = togs bort, `false` =
-  fanns inte)
-- `DeleteTodoHandler` — hitta todon; om `null`, returnera `false`; annars
-  `db.Todos.Remove(todo)`, spara, returnera `true`
-- `DeleteTodoEndpoint` — `app.MapDelete("/api/todos/{id:int}", ...)`,
-  `Results.NoContent()` vid `true`, `Results.NotFound()` vid `false`
+- `DeleteTodoRequest(int Id)`
+- `DeleteTodoEndpoint` — ärv `Endpoint<DeleteTodoRequest>` (bara **en**
+  generisk parameter — det finns inget svar att skicka tillbaka, bara en
+  statuskod). `Configure()`: `Delete("/api/todos/{id}");`. I `HandleAsync`:
+  hitta todon; om `null`, `await Send.NotFoundAsync(ct);`; annars
+  `db.Todos.Remove(todo)`, spara, `await Send.NoContentAsync(ct);`
 - Ingen validator behövs här — `Id` kommer från routen, inte från en body.
 
 ## Steg 4 — Migration (valfritt men rekommenderat)
 
-Appen kör `db.Database.EnsureCreated()` vid uppstart (se `Program.cs`), så
-en ny lokal databas skapas automatiskt med `Todos`-tabellen även utan
-migration. Men för att följa samma konvention som resten av repot
-(`Data/Migrations/`), skapa en migration ändå:
+Appen kör EF Core-migrationer automatiskt vid uppstart i Development
+(`Database.MigrateAsync()`, se `Program.cs`), så för att `Todos`-tabellen ska
+skapas måste du generera och ha med en migration:
 
 ```bash
 cd src/VerticalSliceTemplate
@@ -148,12 +148,8 @@ dotnet ef migrations add AddTodos -o Data/Migrations
 ```
 
 Om du redan har en lokal `verticalslicetemplate.db`-fil från tidigare körningar
-(den är gitignorad, så den finns bara på din maskin) måste du radera den
-innan nästa `dotnet run`, annars saknar den gamla filen `Todos`-tabellen:
-
-```bash
-rm src/VerticalSliceTemplate/verticalslicetemplate.db
-```
+(den är gitignorad, så den finns bara på din maskin) uppdateras den automatiskt
+av migrationen nästa gång du kör `dotnet run` — ingen manuell radering behövs.
 
 ## Steg 5 — Bygg och testa
 
@@ -196,11 +192,13 @@ curl -s -X DELETE http://localhost:5010/api/todos/1 \
 
 ## Steg 6 — Tester (valfritt)
 
-Titta på `tests/VerticalSliceTemplate.Tests/Features/Products/CreateProductHandlerTests.cs`
+Titta på `tests/VerticalSliceTemplate.Tests/Features/Products/CreateProductEndpointTests.cs`
 och `tests/VerticalSliceTemplate.Tests/Common/TestDbContextFactory.cs`. Skapa
 motsvarande `tests/VerticalSliceTemplate.Tests/Features/Todos/`-mapp med ett
-test per handler — ett test som skapar en todo och kollar att den sparades
-är en bra start. Kör med `dotnet test`.
+test per endpoint — instansiera endpointen med
+`Factory.Create<CreateTodoEndpoint>(db)`, anropa `HandleAsync(request, ct)`
+direkt och kolla `ep.Response`. Ett test som skapar en todo och kollar att den
+sparades är en bra start. Kör med `dotnet test`.
 
 ## Steg 7 — (bonus) koppla in det i frontend
 
@@ -246,12 +244,10 @@ modelBuilder.Entity<Todo>(entity =>
 ### `Features/Todos/CreateTodo/`
 
 ```csharp
-// CreateTodoCommand.cs
-using MediatR;
-
+// CreateTodoRequest.cs
 namespace VerticalSliceTemplate.Features.Todos.CreateTodo;
 
-public record CreateTodoCommand(string Title) : IRequest<CreateTodoResponse>;
+public record CreateTodoRequest(string Title);
 ```
 
 ```csharp
@@ -260,7 +256,7 @@ using FluentValidation;
 
 namespace VerticalSliceTemplate.Features.Todos.CreateTodo;
 
-public class CreateTodoValidator : AbstractValidator<CreateTodoCommand>
+public class CreateTodoValidator : AbstractValidator<CreateTodoRequest>
 {
     public CreateTodoValidator()
     {
@@ -277,67 +273,39 @@ public record CreateTodoResponse(int Id, string Title, bool IsDone, DateTime Cre
 ```
 
 ```csharp
-// CreateTodoHandler.cs
-using MediatR;
+// CreateTodoEndpoint.cs
+using FastEndpoints;
 using VerticalSliceTemplate.Data;
 using VerticalSliceTemplate.Data.Entities;
 
 namespace VerticalSliceTemplate.Features.Todos.CreateTodo;
 
-public class CreateTodoHandler(AppDbContext db) : IRequestHandler<CreateTodoCommand, CreateTodoResponse>
+public class CreateTodoEndpoint(AppDbContext db) : Endpoint<CreateTodoRequest, CreateTodoResponse>
 {
-    public async Task<CreateTodoResponse> Handle(CreateTodoCommand request, CancellationToken cancellationToken)
+    public override void Configure()
+    {
+        Post("/api/todos");
+    }
+
+    public override async Task HandleAsync(CreateTodoRequest req, CancellationToken ct)
     {
         var todo = new Todo
         {
-            Title = request.Title,
+            Title = req.Title,
             IsDone = false,
             CreatedAt = DateTime.UtcNow,
         };
 
         db.Todos.Add(todo);
-        await db.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(ct);
 
-        return new CreateTodoResponse(todo.Id, todo.Title, todo.IsDone, todo.CreatedAt);
-    }
-}
-```
-
-```csharp
-// CreateTodoEndpoint.cs
-using MediatR;
-using VerticalSliceTemplate.Features.Shared.Abstractions;
-
-namespace VerticalSliceTemplate.Features.Todos.CreateTodo;
-
-public class CreateTodoEndpoint : IEndpoint
-{
-    public static void MapEndpoint(IEndpointRouteBuilder app)
-    {
-        app.MapPost("/api/todos", async (CreateTodoCommand command, ISender sender) =>
-            {
-                var result = await sender.Send(command);
-                return Results.Created($"/api/todos/{result.Id}", result);
-            })
-            .WithName("CreateTodo")
-            .WithTags("Todos")
-            .RequireAuthorization()
-            .Produces<CreateTodoResponse>(StatusCodes.Status201Created)
-            .ProducesValidationProblem();
+        var response = new CreateTodoResponse(todo.Id, todo.Title, todo.IsDone, todo.CreatedAt);
+        await Send.ResponseAsync(response, StatusCodes.Status201Created, ct);
     }
 }
 ```
 
 ### `Features/Todos/ListTodos/`
-
-```csharp
-// ListTodosQuery.cs
-using MediatR;
-
-namespace VerticalSliceTemplate.Features.Todos.ListTodos;
-
-public record ListTodosQuery : IRequest<IReadOnlyList<ListTodosResponse>>;
-```
 
 ```csharp
 // ListTodosResponse.cs
@@ -347,45 +315,28 @@ public record ListTodosResponse(int Id, string Title, bool IsDone);
 ```
 
 ```csharp
-// ListTodosHandler.cs
-using MediatR;
+// ListTodosEndpoint.cs
+using FastEndpoints;
 using Microsoft.EntityFrameworkCore;
 using VerticalSliceTemplate.Data;
 
 namespace VerticalSliceTemplate.Features.Todos.ListTodos;
 
-public class ListTodosHandler(AppDbContext db) : IRequestHandler<ListTodosQuery, IReadOnlyList<ListTodosResponse>>
+public class ListTodosEndpoint(AppDbContext db) : EndpointWithoutRequest<List<ListTodosResponse>>
 {
-    public async Task<IReadOnlyList<ListTodosResponse>> Handle(ListTodosQuery request, CancellationToken cancellationToken)
+    public override void Configure()
     {
-        return await db.Todos
+        Get("/api/todos");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var todos = await db.Todos
             .OrderBy(t => t.CreatedAt)
             .Select(t => new ListTodosResponse(t.Id, t.Title, t.IsDone))
-            .ToListAsync(cancellationToken);
-    }
-}
-```
+            .ToListAsync(ct);
 
-```csharp
-// ListTodosEndpoint.cs
-using MediatR;
-using VerticalSliceTemplate.Features.Shared.Abstractions;
-
-namespace VerticalSliceTemplate.Features.Todos.ListTodos;
-
-public class ListTodosEndpoint : IEndpoint
-{
-    public static void MapEndpoint(IEndpointRouteBuilder app)
-    {
-        app.MapGet("/api/todos", async (ISender sender) =>
-            {
-                var result = await sender.Send(new ListTodosQuery());
-                return Results.Ok(result);
-            })
-            .WithName("ListTodos")
-            .WithTags("Todos")
-            .RequireAuthorization()
-            .Produces<IReadOnlyList<ListTodosResponse>>();
+        await Send.OkAsync(todos, ct);
     }
 }
 ```
@@ -393,12 +344,10 @@ public class ListTodosEndpoint : IEndpoint
 ### `Features/Todos/GetTodo/`
 
 ```csharp
-// GetTodoQuery.cs
-using MediatR;
-
+// GetTodoRequest.cs
 namespace VerticalSliceTemplate.Features.Todos.GetTodo;
 
-public record GetTodoQuery(int Id) : IRequest<GetTodoResponse?>;
+public record GetTodoRequest(int Id);
 ```
 
 ```csharp
@@ -409,46 +358,34 @@ public record GetTodoResponse(int Id, string Title, bool IsDone, DateTime Create
 ```
 
 ```csharp
-// GetTodoHandler.cs
-using MediatR;
+// GetTodoEndpoint.cs
+using FastEndpoints;
 using Microsoft.EntityFrameworkCore;
 using VerticalSliceTemplate.Data;
 
 namespace VerticalSliceTemplate.Features.Todos.GetTodo;
 
-public class GetTodoHandler(AppDbContext db) : IRequestHandler<GetTodoQuery, GetTodoResponse?>
+public class GetTodoEndpoint(AppDbContext db) : Endpoint<GetTodoRequest, GetTodoResponse>
 {
-    public async Task<GetTodoResponse?> Handle(GetTodoQuery request, CancellationToken cancellationToken)
+    public override void Configure()
     {
-        return await db.Todos
-            .Where(t => t.Id == request.Id)
-            .Select(t => new GetTodoResponse(t.Id, t.Title, t.IsDone, t.CreatedAt))
-            .FirstOrDefaultAsync(cancellationToken);
+        Get("/api/todos/{id}");
     }
-}
-```
 
-```csharp
-// GetTodoEndpoint.cs
-using MediatR;
-using VerticalSliceTemplate.Features.Shared.Abstractions;
-
-namespace VerticalSliceTemplate.Features.Todos.GetTodo;
-
-public class GetTodoEndpoint : IEndpoint
-{
-    public static void MapEndpoint(IEndpointRouteBuilder app)
+    public override async Task HandleAsync(GetTodoRequest req, CancellationToken ct)
     {
-        app.MapGet("/api/todos/{id:int}", async (int id, ISender sender) =>
-            {
-                var result = await sender.Send(new GetTodoQuery(id));
-                return result is not null ? Results.Ok(result) : Results.NotFound();
-            })
-            .WithName("GetTodo")
-            .WithTags("Todos")
-            .RequireAuthorization()
-            .Produces<GetTodoResponse>()
-            .Produces(StatusCodes.Status404NotFound);
+        var todo = await db.Todos
+            .Where(t => t.Id == req.Id)
+            .Select(t => new GetTodoResponse(t.Id, t.Title, t.IsDone, t.CreatedAt))
+            .FirstOrDefaultAsync(ct);
+
+        if (todo is null)
+        {
+            await Send.NotFoundAsync(ct);
+            return;
+        }
+
+        await Send.OkAsync(todo, ct);
     }
 }
 ```
@@ -456,12 +393,10 @@ public class GetTodoEndpoint : IEndpoint
 ### `Features/Todos/CompleteTodo/`
 
 ```csharp
-// CompleteTodoCommand.cs
-using MediatR;
-
+// CompleteTodoRequest.cs
 namespace VerticalSliceTemplate.Features.Todos.CompleteTodo;
 
-public record CompleteTodoCommand(int Id) : IRequest<CompleteTodoResponse?>;
+public record CompleteTodoRequest(int Id);
 ```
 
 ```csharp
@@ -472,52 +407,33 @@ public record CompleteTodoResponse(int Id, string Title, bool IsDone);
 ```
 
 ```csharp
-// CompleteTodoHandler.cs
-using MediatR;
+// CompleteTodoEndpoint.cs
+using FastEndpoints;
 using Microsoft.EntityFrameworkCore;
 using VerticalSliceTemplate.Data;
 
 namespace VerticalSliceTemplate.Features.Todos.CompleteTodo;
 
-public class CompleteTodoHandler(AppDbContext db) : IRequestHandler<CompleteTodoCommand, CompleteTodoResponse?>
+public class CompleteTodoEndpoint(AppDbContext db) : Endpoint<CompleteTodoRequest, CompleteTodoResponse>
 {
-    public async Task<CompleteTodoResponse?> Handle(CompleteTodoCommand request, CancellationToken cancellationToken)
+    public override void Configure()
     {
-        var todo = await db.Todos.FirstOrDefaultAsync(t => t.Id == request.Id, cancellationToken);
+        Patch("/api/todos/{id}/complete");
+    }
+
+    public override async Task HandleAsync(CompleteTodoRequest req, CancellationToken ct)
+    {
+        var todo = await db.Todos.FirstOrDefaultAsync(t => t.Id == req.Id, ct);
         if (todo is null)
         {
-            return null;
+            await Send.NotFoundAsync(ct);
+            return;
         }
 
         todo.IsDone = true;
-        await db.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(ct);
 
-        return new CompleteTodoResponse(todo.Id, todo.Title, todo.IsDone);
-    }
-}
-```
-
-```csharp
-// CompleteTodoEndpoint.cs
-using MediatR;
-using VerticalSliceTemplate.Features.Shared.Abstractions;
-
-namespace VerticalSliceTemplate.Features.Todos.CompleteTodo;
-
-public class CompleteTodoEndpoint : IEndpoint
-{
-    public static void MapEndpoint(IEndpointRouteBuilder app)
-    {
-        app.MapPatch("/api/todos/{id:int}/complete", async (int id, ISender sender) =>
-            {
-                var result = await sender.Send(new CompleteTodoCommand(id));
-                return result is not null ? Results.Ok(result) : Results.NotFound();
-            })
-            .WithName("CompleteTodo")
-            .WithTags("Todos")
-            .RequireAuthorization()
-            .Produces<CompleteTodoResponse>()
-            .Produces(StatusCodes.Status404NotFound);
+        await Send.OkAsync(new CompleteTodoResponse(todo.Id, todo.Title, todo.IsDone), ct);
     }
 }
 ```
@@ -525,60 +441,41 @@ public class CompleteTodoEndpoint : IEndpoint
 ### `Features/Todos/DeleteTodo/`
 
 ```csharp
-// DeleteTodoCommand.cs
-using MediatR;
-
+// DeleteTodoRequest.cs
 namespace VerticalSliceTemplate.Features.Todos.DeleteTodo;
 
-public record DeleteTodoCommand(int Id) : IRequest<bool>;
+public record DeleteTodoRequest(int Id);
 ```
 
 ```csharp
-// DeleteTodoHandler.cs
-using MediatR;
+// DeleteTodoEndpoint.cs
+using FastEndpoints;
 using Microsoft.EntityFrameworkCore;
 using VerticalSliceTemplate.Data;
 
 namespace VerticalSliceTemplate.Features.Todos.DeleteTodo;
 
-public class DeleteTodoHandler(AppDbContext db) : IRequestHandler<DeleteTodoCommand, bool>
+// Endpoint<TRequest> (one generic argument) — there's nothing to send back
+// besides a status code, so there's no TResponse.
+public class DeleteTodoEndpoint(AppDbContext db) : Endpoint<DeleteTodoRequest>
 {
-    public async Task<bool> Handle(DeleteTodoCommand request, CancellationToken cancellationToken)
+    public override void Configure()
     {
-        var todo = await db.Todos.FirstOrDefaultAsync(t => t.Id == request.Id, cancellationToken);
+        Delete("/api/todos/{id}");
+    }
+
+    public override async Task HandleAsync(DeleteTodoRequest req, CancellationToken ct)
+    {
+        var todo = await db.Todos.FirstOrDefaultAsync(t => t.Id == req.Id, ct);
         if (todo is null)
         {
-            return false;
+            await Send.NotFoundAsync(ct);
+            return;
         }
 
         db.Todos.Remove(todo);
-        await db.SaveChangesAsync(cancellationToken);
-        return true;
-    }
-}
-```
-
-```csharp
-// DeleteTodoEndpoint.cs
-using MediatR;
-using VerticalSliceTemplate.Features.Shared.Abstractions;
-
-namespace VerticalSliceTemplate.Features.Todos.DeleteTodo;
-
-public class DeleteTodoEndpoint : IEndpoint
-{
-    public static void MapEndpoint(IEndpointRouteBuilder app)
-    {
-        app.MapDelete("/api/todos/{id:int}", async (int id, ISender sender) =>
-            {
-                var deleted = await sender.Send(new DeleteTodoCommand(id));
-                return deleted ? Results.NoContent() : Results.NotFound();
-            })
-            .WithName("DeleteTodo")
-            .WithTags("Todos")
-            .RequireAuthorization()
-            .Produces(StatusCodes.Status204NoContent)
-            .Produces(StatusCodes.Status404NotFound);
+        await db.SaveChangesAsync(ct);
+        await Send.NoContentAsync(ct);
     }
 }
 ```

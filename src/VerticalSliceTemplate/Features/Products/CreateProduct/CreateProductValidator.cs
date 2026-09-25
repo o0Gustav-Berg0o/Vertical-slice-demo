@@ -2,12 +2,12 @@ using FluentValidation;
 
 namespace VerticalSliceTemplate.Features.Products.CreateProduct;
 
-// Optional, but present in most slices: an AbstractValidator<TCommand> is
-// found automatically by AddFeatures and run automatically by
-// ValidationBehavior before Handle() below ever executes. The Handler never
-// needs to check these rules itself — by the time it runs, the command is
-// already known-valid.
-public class CreateProductValidator : AbstractValidator<CreateProductCommand>
+// A plain FluentValidation AbstractValidator<TRequest>. FastEndpoints finds
+// and runs this automatically before HandleAsync (enabled via
+// IncludeAbstractValidators in Program.cs) — the endpoint never needs to
+// check these rules itself; a failed validation short-circuits with a 400
+// before HandleAsync is ever called.
+public class CreateProductValidator : AbstractValidator<CreateProductRequest>
 {
     public CreateProductValidator()
     {

@@ -37,15 +37,15 @@ Identity is battle-tested, actively maintained by Microsoft, and does all of thi
   separate from Identity itself: Identity has no built-in JWT support, so this template adds
   a small, explicit layer for it.
 - **`Features/Auth/Login/`** and **`Features/Auth/Register/`** — ordinary vertical slices
-  (see [../README.md](../README.md)), just like `Products/CreateProduct/`. Their handlers
+  (see [../README.md](../README.md)), just like `Products/CreateProduct/`. Their endpoints
   use `UserManager`/`SignInManager` instead of talking to `AppDbContext` directly — that's
   what "using Identity" means in code.
 
 ## The request flow
 
 **Register** (`POST /api/auth/register`, anonymous):
-`RegisterHandler` calls `UserManager.CreateAsync(user, password)`. New users get **no
-role** — least privilege by default. If Identity rejects the password (or the username is
+`RegisterEndpoint.HandleAsync` calls `UserManager.CreateAsync(user, password)`. New users get
+**no role** — least privilege by default. If Identity rejects the password (or the username is
 taken), its `IdentityResult.Errors` are translated into a FluentValidation `ValidationException`
 so the same global exception handler that handles every other slice's validation failures
 handles this one too, with no special-casing in `Program.cs`.
@@ -64,23 +64,35 @@ handles this one too, with no special-casing in `Program.cs`.
 **Every other request**: the JWT bearer middleware (configured in `Program.cs`) validates
 the token's signature, issuer, audience, and expiry. If it's valid, `HttpContext.User`
 carries the claims embedded at login — including the role claims — so a role check like
-`RequireRole("Admin")` is a claim lookup against the token, not a database query.
+`Roles("Admin")` is a claim lookup against the token, not a database query.
 
 ## Protecting an endpoint
 
 ```csharp
-// Any signed-in user:
-.RequireAuthorization()
+public override void Configure()
+{
+    Post("/api/products");
 
-// Signed-in AND in the Admin role (see CreateProductEndpoint.cs):
-.RequireAuthorization(policy => policy.RequireRole(Roles.Admin))
-
-// No token required at all (only Login and Register use this):
-.AllowAnonymous()
+    // Signed-in AND in the Admin role (see CreateProductEndpoint.cs):
+    Roles(Roles.Admin);
+}
 ```
 
+```csharp
+public override void Configure()
+{
+    Post("/api/auth/login");
+
+    // No token required at all (only Login and Register use this):
+    AllowAnonymous();
+}
+```
+
+Every endpoint is secure-by-default — calling neither `Roles(...)` nor `AllowAnonymous()`
+in `Configure()` means "any signed-in user, any role" (see `GetProductEndpoint.cs`).
+
 `Roles.Admin` is a constant in `Data/Entities/Roles.cs` — use the constant, not a literal
-`"Admin"` string, so a typo becomes a compile error instead of a silently-broken policy.
+`"Admin"` string, so a typo becomes a compile error instead of a silently-broken check.
 
 ## Demo accounts
 

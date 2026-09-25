@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace VerticalSliceTemplate.Features.Auth.Login;
 
-public class LoginValidator : AbstractValidator<LoginCommand>
+public class LoginValidator : AbstractValidator<LoginRequest>
 {
     public LoginValidator()
     {

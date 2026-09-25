@@ -1,21 +1,37 @@
-using MediatR;
-using VerticalSliceTemplate.Features.Shared.Abstractions;
+using FastEndpoints;
+using Microsoft.EntityFrameworkCore;
+using VerticalSliceTemplate.Data;
 
 namespace VerticalSliceTemplate.Features.Orders.GetOrder;
 
-public class GetOrderEndpoint : IEndpoint
+public class GetOrderEndpoint(AppDbContext db) : Endpoint<GetOrderRequest, GetOrderResponse>
 {
-    public static void MapEndpoint(IEndpointRouteBuilder app)
+    public override void Configure()
     {
-        app.MapGet("/api/orders/{id:int}", async (int id, ISender sender) =>
-            {
-                var result = await sender.Send(new GetOrderQuery(id));
-                return result is not null ? Results.Ok(result) : Results.NotFound();
-            })
-            .WithName("GetOrder")
-            .WithTags("Orders")
-            .RequireAuthorization()
-            .Produces<GetOrderResponse>()
-            .Produces(StatusCodes.Status404NotFound);
+        Get("/api/orders/{id}");
+    }
+
+    public override async Task HandleAsync(GetOrderRequest req, CancellationToken ct)
+    {
+        var order = await db.Orders
+            .Include(o => o.Items)
+            .FirstOrDefaultAsync(o => o.Id == req.Id, ct);
+
+        if (order is null)
+        {
+            await Send.NotFoundAsync(ct);
+            return;
+        }
+
+        var response = new GetOrderResponse(
+            order.Id,
+            order.CustomerName,
+            order.TotalAmount,
+            order.CreatedAt,
+            order.Items
+                .Select(i => new GetOrderItemResponse(i.ProductId, i.ProductName, i.Quantity, i.UnitPrice))
+                .ToList());
+
+        await Send.OkAsync(response, ct);
     }
 }

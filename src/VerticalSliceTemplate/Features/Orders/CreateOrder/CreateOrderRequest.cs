@@ -1,9 +1,7 @@
-using MediatR;
-
 namespace VerticalSliceTemplate.Features.Orders.CreateOrder;
 
-public record CreateOrderCommand(
+public record CreateOrderRequest(
     string CustomerName,
-    List<CreateOrderLineItem> Items) : IRequest<CreateOrderResponse>;
+    List<CreateOrderLineItem> Items);
 
 public record CreateOrderLineItem(int ProductId, int Quantity);

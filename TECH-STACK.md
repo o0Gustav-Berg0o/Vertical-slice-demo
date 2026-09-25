@@ -7,16 +7,15 @@ This is the stack you'll be building your own project in, based on this template
 | Technology | Role |
 |---|---|
 | **.NET 10** | Runtime and SDK |
-| **ASP.NET Core Minimal APIs** | HTTP endpoints — no MVC controllers, each feature maps its own route directly |
-| **MediatR** | In-process command/query dispatch — routes each request to exactly one handler |
-| **FluentValidation** | Request validation, wired in as a MediatR pipeline behavior so it runs automatically before every handler |
+| **FastEndpoints** | HTTP endpoints — no MVC controllers, no separate mediator: each feature is one `Endpoint<TRequest, TResponse>` class that owns its own route, auth rules, and logic |
+| **FluentValidation** | Request validation — FastEndpoints discovers and runs each feature's `AbstractValidator<TRequest>` automatically before `HandleAsync` |
 | **Entity Framework Core (SQLite)** | Persistence — one `AppDbContext`, one SQLite file, migrations under `Data/Migrations/` |
 | **ASP.NET Core Identity** (`AddIdentityCore`) | User accounts, password hashing, account lockout, and roles — via `UserManager`/`SignInManager`/`RoleManager` |
 | **JWT Bearer authentication** | Stateless auth for API requests — a signed token is issued at login and validated on every later request |
 
 ## Architecture pattern
 
-**Vertical Slice Architecture**: the app is organized by feature (`Features/Products/CreateProduct/`, `Features/Auth/Login/`, etc.), not by technical layer. Each feature folder is self-contained: a Command/Query, a Validator, a Handler, a Response, and an Endpoint. See [`src/VerticalSliceTemplate/Features/README.md`](src/VerticalSliceTemplate/Features/README.md) for the full explanation.
+**Vertical Slice Architecture**: the app is organized by feature (`Features/Products/CreateProduct/`, `Features/Auth/Login/`, etc.), not by technical layer. Each feature folder is self-contained: a Request, a Validator, a Response, and an Endpoint. FastEndpoints routes each HTTP call directly to its endpoint's `HandleAsync` — there's no separate mediator layer sitting in between. See [`src/VerticalSliceTemplate/Features/README.md`](src/VerticalSliceTemplate/Features/README.md) for the full explanation.
 
 ## Authentication
 
