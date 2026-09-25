@@ -1,146 +1,149 @@
-# Architecture Comparison Demo
+# Vertical Slice Template
 
-Two .NET 10 Web APIs implementing the **identical domain and HTTP contract** (Products,
-Orders) with two different architectural styles, plus one frontend that can drive either
-one — so you can compare the styles side by side without the API surface changing.
-
-| | Vertical Slice API | Layered API |
-|---|---|---|
-| Path | `src/VerticalSliceDemo` | `src/LayeredArchitectureDemo` |
-| Organized by | Feature | Technical layer |
-| Request dispatch | MediatR command/query | ASP.NET controllers |
-| Validation | FluentValidation as a MediatR pipeline behavior | FluentValidation invoked explicitly in the service layer |
-| Default port | 5010 | 5136 |
-
-Both expose the same routes (`GET/POST /api/products`, `GET /api/products/{id}`,
-`POST/GET /api/orders[/{id}]`) with the same JSON shapes, backed by their own SQLite database.
-All of those routes require a **JWT bearer token** — see [Authentication](#authentication) below.
-
-## 1. Vertical Slice API (`src/VerticalSliceDemo`)
-
-Each feature owns its request/response, handler, and validation in one folder, instead of
-being spread across layered Controllers/Services/Repositories.
+A .NET 10 Web API built with **Vertical Slice Architecture** — organized by feature
+instead of by technical layer — using **ASP.NET Core Identity** for authentication and
+role-based authorization. This repository is meant to be used as a **student template**:
+clone it, read through `Features/Products/CreateProduct/` as the reference example, then
+build your own features the same way.
 
 ```
-src/VerticalSliceDemo/
-├── Features/
-│   ├── Products/
-│   │   ├── CreateProduct/   (Command, Handler, Validator, Response, Endpoint)
-│   │   ├── GetProduct/      (Query, Handler, Response, Endpoint)
-│   │   └── ListProducts/    (Query, Handler, Response, Endpoint)
-│   ├── Orders/
-│   │   ├── CreateOrder/     (Command, Handler, Validator, Response, Endpoint)
-│   │   └── GetOrder/        (Query, Handler, Response, Endpoint)
-│   ├── Shared/
-│   │   ├── Abstractions/    (IEndpoint, ValidationBehavior, NotFoundException, UnauthorizedException)
-│   │   ├── Extensions/      (DI + endpoint-mapping helpers)
-│   │   └── Security/        (PasswordHasher, JwtOptions, JwtTokenGenerator)
-│   └── Auth/
-│       └── Login/           (Command, Handler, Validator, Response, Endpoint — AllowAnonymous)
-├── Data/
-│   ├── AppDbContext.cs
-│   ├── AppDbContextFactory.cs   (EF Core design-time factory)
-│   ├── DbSeeder.cs              (seeds one demo user on startup)
-│   ├── Entities/                (Product, Order, OrderItem, User)
-│   └── Migrations/
-├── Program.cs
-└── appsettings.json
+Path            src/VerticalSliceTemplate
+Default port    5010
 ```
 
-- **MediatR** dispatches each command/query to its single handler.
-- **FluentValidation** validators are picked up by a `ValidationBehavior` in the MediatR
-  pipeline, so every request is validated before it reaches its handler.
-- Adding a feature: create a folder under `Features/<Area>/<FeatureName>/` with a
-  `Command`/`Query`, `Response`, `Handler`, optional `Validator`, and an `Endpoint`
-  implementing `IEndpoint`. `AddFeatures`/`MapFeatureEndpoints` scan the assembly and wire
-  it up automatically — nothing else needs registering.
+## Quick start
+
+Prerequisites: [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
 ```bash
-cd src/VerticalSliceDemo
+cd src/VerticalSliceTemplate
 dotnet run   # http://localhost:5010
 ```
 
-## 2. Layered API (`src/LayeredArchitectureDemo`)
+On first run in Development, the app applies EF Core migrations (`dotnet ef database
+update` under the hood, via `Database.MigrateAsync()`) and seeds two demo accounts:
 
-The same domain, organized the traditional way: by technical layer instead of by feature.
+| Username | Password | Role |
+|---|---|---|
+| `admin` | `Passw0rd!` | Admin |
+| `user` | `Passw0rd!` | *(none)* |
+
+If you ever need to run migrations by hand (e.g. after adding your own entity):
+
+```bash
+cd src/VerticalSliceTemplate
+dotnet ef migrations add <Name> --output-dir Data/Migrations
+dotnet ef database update
+```
+
+## Structure
 
 ```
-src/LayeredArchitectureDemo/
-├── Controllers/       (ProductsController, OrdersController [Authorize]; AuthController [AllowAnonymous])
-├── Services/          (Product/Order/Auth services — business logic)
-├── Repositories/      (Product/Order/User repositories — data access)
-├── Models/
-│   ├── Dtos/           (request/response records, incl. Login)
-│   └── Entities/       (EF Core entities, incl. User)
-├── Validators/         (FluentValidation validators for request DTOs)
+src/VerticalSliceTemplate/
+├── Features/
+│   ├── Products/
+│   │   ├── CreateProduct/   (Request, Validator, Response, Endpoint — the reference slice)
+│   │   ├── GetProduct/      (Request, Response, Endpoint)
+│   │   └── ListProducts/    (Response, Endpoint — no Request, it takes no input)
+│   ├── Orders/
+│   │   ├── CreateOrder/     (Request, Validator, Response, Endpoint)
+│   │   └── GetOrder/        (Request, Response, Endpoint)
+│   ├── Auth/
+│   │   ├── Login/           (Request, Validator, Response, Endpoint — AllowAnonymous)
+│   │   └── Register/        (Request, Validator, Response, Endpoint — AllowAnonymous)
+│   ├── Shared/
+│   │   ├── Abstractions/    (NotFoundException, UnauthorizedException)
+│   │   └── Security/        (JwtOptions, JwtTokenGenerator)
+│   └── README.md            (deep dive on the vertical slice pattern itself)
 ├── Data/
-│   ├── AppDbContext.cs
+│   ├── AppDbContext.cs      (IdentityDbContext<ApplicationUser> + Products/Orders)
 │   ├── AppDbContextFactory.cs
-│   ├── DbSeeder.cs     (seeds one demo user on startup)
+│   ├── DbSeeder.cs          (seeds the Admin role + two demo accounts)
+│   ├── Entities/            (Product, Order, OrderItem, ApplicationUser, Roles)
 │   └── Migrations/
-├── Common/             (NotFoundException, UnauthorizedException, PasswordHasher, JwtOptions, JwtTokenGenerator)
 ├── Program.cs
 └── appsettings.json
 ```
 
-- Controllers only translate HTTP <-> DTOs and call a service.
-- Services hold business logic: they call `IValidator<T>.ValidateAndThrowAsync` themselves,
-  then coordinate one or more repositories.
-- Repositories are the only place that talks to `AppDbContext`.
-- Adding a feature means touching every layer: a DTO, a validator, a repository method (if
-  needed), a service method, and a controller action — the trade-off VSA avoids.
+See **[Features/README.md](src/VerticalSliceTemplate/Features/README.md)** for a full
+walkthrough of the vertical slice pattern — the folder-per-feature convention, the 4-file
+shape, and how a new slice gets picked up automatically with zero changes to `Program.cs`.
 
-```bash
-cd src/LayeredArchitectureDemo
-dotnet run   # http://localhost:5136
-```
+Want hands-on practice? **[OVNING-TodoApp-VerticalSlice.md](OVNING-TodoApp-VerticalSlice.md)**
+is a step-by-step exercise (in Swedish) that walks through adding a whole new feature — a
+Todo list — the same way Products and Orders are built here.
 
 ## Authentication
 
-Both APIs require a JWT bearer token on every Products/Orders route. Each seeds one demo
-user on startup and exposes an anonymous login endpoint that issues a token:
+See **[Features/Auth/README.md](src/VerticalSliceTemplate/Features/Auth/README.md)** for
+the full picture. In short:
+
+- Every route requires a JWT bearer token, **except** `POST /api/auth/register` and
+  `POST /api/auth/login`.
+- Register, then log in, to get a token:
 
 ```bash
+curl -X POST http://localhost:5010/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"jane","email":"jane@example.com","password":"Passw0rd!"}'
+
 curl -X POST http://localhost:5010/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"Passw0rd!"}'
-# => { "token": "eyJ...", "expiresAtUtc": "...", "username": "admin" }
+  -d '{"username":"jane","password":"Passw0rd!"}'
+# => { "token": "eyJ...", "expiresAtUtc": "...", "username": "jane", "roles": [] }
 
 curl http://localhost:5010/api/products -H "Authorization: Bearer <token>"
 ```
 
-Notes:
-- Passwords are hashed with PBKDF2 (100,000 iterations, per-user salt) — see `PasswordHasher`
-  in each API's `Common`/`Features/Shared/Security` folder.
-- Tokens are HS256-signed with a per-API secret configured under `Jwt:SigningKey` in each
-  `appsettings.json`. **These are demo secrets committed to the repo** — replace them (e.g.
-  with user secrets or an environment variable) before using this outside a local demo.
-- A token issued by one API is not valid on the other — they have independent signing keys
-  and issuers, even though the DTO shapes match.
-- Requests without a valid token get `401 Unauthorized`; a failed login also returns `401`.
+- `POST /api/products` additionally requires the **Admin** role — log in as the seeded
+  `admin` account (or promote a user yourself) to create a product. Any other authenticated
+  user gets `403 Forbidden`.
+- User storage, password hashing, and lockout are handled entirely by **ASP.NET Core
+  Identity** (`UserManager`/`SignInManager`/`RoleManager`) — nothing is hand-rolled.
+- The JWT signing key in `appsettings.json` is a **demo secret committed to the repo**.
+  Replace it (e.g. with `dotnet user-secrets` or an environment variable) before using this
+  outside a local demo.
 
-## 3. Frontend (`frontend/`)
+## Adding a new feature
 
-A dependency-free static page (plain HTML/CSS/JS, no build step) that can log in, then
-create/list products and create/look up orders against **either** backend — pick one from
-the cards at the top of the page. The demo credentials are pre-filled in the login form.
-Signing in to one backend does not carry over to the other, since each issues its own token.
-Both APIs enable CORS (`AllowAnyOrigin`) for local development so the page can call them
-directly from a different origin.
+1. Create a folder under `Features/<Area>/<FeatureName>/`.
+2. Add a `Request` record, a `Response` record, and — if the input needs validating — a
+   `Validator` (`AbstractValidator<TRequest>`).
+3. Add an `Endpoint` class deriving from `Endpoint<TRequest, TResponse>` (or
+   `EndpointWithoutRequest<TResponse>` if there's no input). Set the route and any auth
+   rules in `Configure()`, and put the actual logic in `HandleAsync` — there's no separate
+   Handler class, the endpoint *is* the handler. Every endpoint requires a signed-in user
+   by default; call `AllowAnonymous()` in `Configure()` if it shouldn't.
+4. That's it — `AddFastEndpoints()`/`UseFastEndpoints()` (see `Program.cs`) scan the
+   assembly for endpoints and validators at startup, so nothing else needs registering.
+   `Features/Products/CreateProduct/` is the fastest way to see the shape — copy it as a
+   starting point.
+
+## Frontend (`frontend/`)
+
+A dependency-free static page (plain HTML/CSS/JS, no build step) that can register, log in,
+and then create/list products and create/look up orders against the API above. It's served
+by a minimal ASP.NET Core static-file host, `Frontend.csproj`:
 
 ```bash
 cd frontend
-python3 -m http.server 8080   # or any static file server
+dotnet run   # http://localhost:8080
 ```
 
-Then open http://localhost:8080, with both APIs running (see above) in the background.
+Then open http://localhost:8080, with the API (see above) running in the background. The
+API enables CORS (`AllowAnyOrigin`) for local development so the page can call it directly
+from a different origin. See **[frontend/README.md](frontend/README.md)** for details.
 
-## Stack (both APIs)
+## Stack
 
 - **.NET 10**
+- **ASP.NET Core Identity** (`AddIdentityCore` + EF Core stores) for user/role management
+- **JWT bearer authentication** (`Microsoft.AspNetCore.Authentication.JwtBearer`) issued
+  after a successful Identity login
+- **FastEndpoints** for routing — each feature's `Endpoint<TRequest, TResponse>` class
+  handles its own request directly, no mediator layer in between
+- **FluentValidation**, auto-discovered and run by FastEndpoints before `HandleAsync`
 - **EF Core (SQLite)** for persistence, **EF Core InMemory** for tests
-- **FluentValidation** for request validation
-- **JWT bearer authentication** (`Microsoft.AspNetCore.Authentication.JwtBearer`)
 - **xUnit** for unit tests
 
 ## Testing
@@ -149,5 +152,9 @@ Then open http://localhost:8080, with both APIs running (see above) in the backg
 dotnet test
 ```
 
-Runs unit tests for both APIs: handler/validator/login tests for the Vertical Slice API, and
-service tests, including auth, (against an in-memory database) for the Layered API.
+Covers endpoint and validator tests for every feature, including `Login`/`Register`
+tests that exercise real `UserManager`/`SignInManager`/`RoleManager` instances against an
+in-memory database (see `tests/VerticalSliceTemplate.Tests/Common/IdentityTestFactory.cs`)
+rather than mocking Identity's manager classes. Endpoint tests use FastEndpoints'
+`Factory.Create<TEndpoint>(...)` to instantiate an endpoint directly and call `HandleAsync`,
+asserting on its `Response` — no `WebApplicationFactory` or real HTTP server needed.
